@@ -11,13 +11,14 @@ all-features = true
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [dependencies]
-egui = "0.27.0"
-eframe = { version = "0.27.0", default-features = false, features = [
+egui = "0.27.2"
+eframe = { version = "0.27.2", default-features = false, features = [
     "accesskit",     # Make egui comptaible with screen readers. NOTE: adds a lot of dependencies.
     "default_fonts", # Embed the default egui fonts.
     "glow",          # Use the glow rendering backend. Alternative: "wgpu".
     "persistence",   # Enable restoring app state when restarting the app.
 ] }
+
 log = "0.4"
 image="0.25.1"
 # You only need serde if you want app persistence:
@@ -25,9 +26,15 @@ serde = { version = "1", features = ["derive"] }
 egui_extras={ version = "0.27.2", features = ["all_loaders"] } 
 timer="*"
 chrono="*"
+sqlite="0.36.0"
 # native:
+
+serde_json = "1.0"
+
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 env_logger = "0.10"
+
+
 
 # web:
 [target.'cfg(target_arch = "wasm32")'.dependencies]

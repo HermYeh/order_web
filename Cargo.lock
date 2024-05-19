@@ -997,9 +997,9 @@ dependencies = [
 
 [[package]]
 name = "eframe"
-version = "0.27.0"
+version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86811b20df847cfa73637020ee78de780407110f49785df2dea6741146ea5aac"
+checksum = "020e2ccef6bbcec71dbc542f7eed64a5846fc3076727f5746da8fd307c91bab2"
 dependencies = [
  "bytemuck",
  "cocoa",
@@ -1043,6 +1043,8 @@ dependencies = [
  "image 0.25.1",
  "log",
  "serde",
+ "serde_json",
+ "sqlite",
  "timer",
  "wasm-bindgen-futures",
 ]
@@ -1064,9 +1066,9 @@ dependencies = [
 
 [[package]]
 name = "egui-winit"
-version = "0.27.0"
+version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff4fc01bc3617dba9280475e9ab2382015e298f401d2318c2a1d78c419b6dffe"
+checksum = "2e3da0cbe020f341450c599b35b92de4af7b00abde85624fd16f09c885573609"
 dependencies = [
  "accesskit_winit",
  "arboard",
@@ -1098,9 +1100,9 @@ dependencies = [
 
 [[package]]
 name = "egui_glow"
-version = "0.27.0"
+version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "743380a1c0f1dbb7bfe29663ce62b10785adda51105c9bb4e544e2f9955b4958"
+checksum = "e0e5d975f3c86edc3d35b1db88bb27c15dde7c55d3b5af164968ab5ede3f44ca"
 dependencies = [
  "bytemuck",
  "egui",
@@ -1808,6 +1810,12 @@ checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
 dependencies = [
  "either",
 ]
+
+[[package]]
+name = "itoa"
+version = "1.0.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
 
 [[package]]
 name = "jni"
@@ -2804,6 +2812,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ryu"
+version = "1.0.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3cb5ba0dc43242ce17de99c180e96db90b235b8a9fdc9543c96d2209116bd9f"
+
+[[package]]
 name = "same-file"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2842,6 +2856,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.48",
+]
+
+[[package]]
+name = "serde_json"
+version = "1.0.117"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "455182ea6142b14f93f4bc5320a2b31c1f266b66a4a5c858b013302a5d8cbfc3"
+dependencies = [
+ "itoa",
+ "ryu",
+ "serde",
 ]
 
 [[package]]
@@ -3000,6 +3025,34 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
 dependencies = [
  "lock_api",
+]
+
+[[package]]
+name = "sqlite"
+version = "0.36.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "274e5a9a0968bc9797fd3fe75a544cbcd3e3c2a111cb1c11cb8a0290f9684cb2"
+dependencies = [
+ "sqlite3-sys",
+]
+
+[[package]]
+name = "sqlite3-src"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "174d4a6df77c27db281fb23de1a6d968f3aaaa4807c2a1afa8056b971f947b4a"
+dependencies = [
+ "cc",
+ "pkg-config",
+]
+
+[[package]]
+name = "sqlite3-sys"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3901ada7090c3c3584dc92ec7ef1b7091868d13bfe6d7de9f0bcaffee7d0ade5"
+dependencies = [
+ "sqlite3-src",
 ]
 
 [[package]]
