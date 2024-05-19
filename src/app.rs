@@ -12,10 +12,10 @@ use eframe::{egui};
 use egui::{ Id, RichText, TextureHandle, Vec2};
 use image;
 use std::sync::mpsc::channel;
-
-
+use reqwest::Client;
+use wasm_bindgen_futures::spawn_local;
 use crate::order_table;
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, serde::Serialize,Clone)]
 #[serde(default)]
 pub struct TemplateApp {
     // Example stuff:
@@ -32,6 +32,7 @@ pub struct TemplateApp {
     friedbun_count: i32,
     pub payment: Vec<bool>,
     pub scroll_to_row: Option<usize>,
+    name:String,
 }
 
 fn check_order(template_app:&mut TemplateApp){
@@ -160,8 +161,8 @@ impl<'a> Default for TemplateApp {
             row_index: 0,
             friedbun_count: 0,
             payment: vec![false;50],
-        
             scroll_to_row: None,
+            name:"".to_owned(),
         }
     }
   
@@ -182,6 +183,39 @@ impl TemplateApp {
         Default::default()
     }
 }
+use serde::{Deserialize, Serialize};
+#[derive(Serialize)]
+struct SaveData<'a> {
+    key: &'a str,
+    value: &'a str,
+}
+
+#[derive(Deserialize)]
+struct LoadData {
+    value: String,
+}
+
+async fn save_to_remote(key: &str, value: &str) -> Result<(), reqwest::Error> {
+    let client = reqwest::Client::new();
+    let data = SaveData { key, value };
+    client.post("http://127.0.0.1:8080/save")
+        .json(&data)
+        .send()
+        .await?
+        .error_for_status()?;
+    Ok(())
+}
+
+async fn load_from_remote(key: &str) -> Result<String, reqwest::Error> {
+    let client = reqwest::Client::new();
+    let value: String = client.post("http://127.0.0.1:8080/load")
+        .json(&key)
+        .send()
+        .await?
+        .json()
+        .await?;
+    Ok(value)
+}
 
 impl eframe::App for TemplateApp {
     /// Called by the frame work to save state before shutdown.
@@ -195,7 +229,22 @@ impl eframe::App for TemplateApp {
      
   
         egui::CentralPanel::default().show(ctx, |ui| {
-    
+            if ui.button("Save").clicked() {
+                let name = self.name.clone();
+                spawn_local(async move {
+                    save_to_remote("name", &name).await.unwrap();
+                });
+            }
+
+            if ui.button("Load").clicked() {
+                let name_clone = self.name.clone();
+                let mut app = self.clone();
+                spawn_local(async move {
+                    app.name = load_from_remote("name").await.unwrap_or_default();
+                });
+            }
+
+            ui.label(format!("Hello, {}!", self.name));
             let body_text_size = TextStyle::Body.resolve(ui.style()).size;
             use egui_extras::{Size, StripBuilder};
             StripBuilder::new(ui)
