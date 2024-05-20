@@ -9,6 +9,18 @@ pub struct Table {
  
    
 }
+use std::ffi::CString;
+use std::mem::size_of;
+use std::slice;
+use std::{
+    io::{prelude::*, BufReader},
+    str,
+};
+use std::net::TcpStream;
+struct FileHeader {
+    size: u32,
+    
+}
 impl Default for Table {
     fn default() -> Self {
         Self {
@@ -19,6 +31,68 @@ impl Default for Table {
             
         }
     }
+}
+use serde::{Deserialize, Serialize};
+#[derive(Serialize, Deserialize)]
+
+
+struct Message {
+    vector:Vec<(String,String,bool)>,
+}
+fn handle_connection( vector:Vec<(String,String,bool)>) {
+       
+       
+    let connection = sqlite::Connection::open("order.db").unwrap();
+    let query = "CREATE TABLE IF NOT EXISTS data (order_number TEXT PRIMARY KEY, check_in TEXT);";
+    println!("query{}",query);
+    connection.execute(query).unwrap();
+    
+    for each in vector.iter(){
+        let query="INSERT OR IGNORE INTO data (order_number, check_in) VALUES ('".to_owned()+&each.0+"','"+&each.1+"');
+        UPDATE data SET check_in ='"+&each.1+"' WHERE order_number='"+&each.0+"';";
+        
+        println!("query{}",query);
+        connection.execute(&query).unwrap();
+    }
+   
+    
+    
+}
+
+
+
+pub fn save_to_remote(total_order:Vec<(String, String,bool)>)  {
+   handle_connection(total_order);
+   /* 
+    let  mut client =  TcpStream::connect("154.38.162.182:6000").expect("Stream failed to connect");
+    println!("connect! ");
+    unsafe{
+
+    let message = Message { vector:total_order.clone() };
+    
+     let data = serde_json::to_vec(&message).unwrap();
+        
+    
+    client.write(
+        slice::from_raw_parts(
+            &FileHeader {
+                size: data.len() as u32,
+            } as *const _ as *const u8,
+            size_of::<FileHeader>(),
+        )
+    ).unwrap();
+ 
+    client.write(&data).unwrap();
+    println!("Vector sent");
+
+    }
+  
+        
+ 
+    
+      */
+    
+     
 }
 
 impl Table {
@@ -171,6 +245,8 @@ fn toggle_row_selection(select:&mut TemplateApp, row_index: usize, row_response:
         select.total_order.remove(row_index);
         select.payment.remove(row_index);
         select.payment.push(false);
-        select.selection=999
+        select.selection=999;
+        save_to_remote(select.total_order.clone());
+    
     }
 }

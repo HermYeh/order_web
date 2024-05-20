@@ -21,7 +21,7 @@ use std::io::Write;
 
 use crate::order_table;
 
-const LOCAL: &str = "127.0.0.1:6000";
+const LOCAL: &str = "154.38.162.182:6000";
 const MSG_SIZE: usize = 32;
 
 #[derive(serde::Deserialize, serde::Serialize,Clone)]
@@ -72,7 +72,7 @@ fn check_order(template_app:&mut TemplateApp){
             
         }
         
-        save_to_remote(template_app.total_order.clone());
+        order_table::save_to_remote(template_app.total_order.clone());
       
     };
 }
@@ -156,6 +156,7 @@ fn buttons(template_app:&mut TemplateApp,ui:&mut Ui){
                 }else{
                     template_app.order_number.clear();
                 }
+                order_table::save_to_remote(template_app.total_order.clone());
             }
     });  
 });  
@@ -185,23 +186,73 @@ use std::{
     net::TcpStream,
     sync::mpsc,
 };
-use crossbeam::channel::unbounded;
-use lazy_static::lazy_static;
-use std::sync::Mutex;
-use std::sync::Arc;
-use std::ffi::CString;
-use std::mem::size_of;
-use std::slice;
-use std::{
-    io::{prelude::*, BufReader},
-    str,
-};
+
 #[derive(Debug, Copy, Clone)]
 #[repr(C, align(8))]
 struct FileHeader {
     size: u32,
     
 }
+const BUF_LEN: usize = 4096;
+use std::slice;
+use std::mem::size_of;
+fn load_vector()->Vec<(String,String,bool)>{
+    let mut total_orders:Vec<(String,String,bool)>=Vec::new();
+
+    let conn =sqlite::Connection::open("order.db").unwrap();
+    let query = "SELECT * FROM data";
+ let mut statement=conn.prepare(query).unwrap();
+  while let sqlite::State::Row= statement.next().unwrap(){
+  
+  let orderid= statement.read(0).unwrap();
+  let checkin=statement.read(1).unwrap();
+  total_orders.push((orderid,checkin,false));
+  } ;
+    total_orders
+    /* 
+    let  mut client =  TcpStream::connect("154.38.162.182:6000").expect("Stream failed to connect");
+    println!("connect! ");
+    unsafe{
+    client.write(
+        slice::from_raw_parts(
+            &FileHeader {
+                size: 0 as u32,
+            } as *const _ as *const u8,
+            size_of::<FileHeader>(),
+        )
+    ).unwrap();
+}
+    let mut readen_size = 0;
+    let mut buf_file_header = [0; size_of::<FileHeader>()];
+    println!("buf_file_header{:?}",buf_file_header);
+    client.read_exact(&mut buf_file_header).unwrap();
+    let mut total_orders:Vec<(String,String,bool)>=Vec::new();
+    let file_header: FileHeader = unsafe { *(buf_file_header.as_ptr() as *const _) };
+    let file_size = file_header.size as usize;
+    let mut buf = [0; BUF_LEN];
+    println!("file_header.size{:?}",file_header.size);
+    
+    let mut output=Vec::new();
+    while readen_size < file_size {
+        let read_size: usize = if file_size - readen_size < BUF_LEN {
+            println!("readen_size.size{:?}",readen_size);
+            file_size - readen_size
+        
+        } else {
+            println!("readen_size.size{:?}",readen_size);
+            BUF_LEN
+        };
+        client.read_exact(&mut buf[0..read_size]).unwrap();
+        readen_size += read_size;
+        let message: Message = serde_json::from_slice(&buf[0..read_size]).unwrap();
+        println!("Received vector: {:?}", message.vector);
+       output= message.vector;
+    };
+    output
+
+*/
+}
+
 impl TemplateApp {
     /// Called once before the first frame.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
@@ -213,48 +264,17 @@ impl TemplateApp {
         if let Some(storage) = cc.storage {
             return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
         }
-    
+     
+       
+
         Default::default()
     }
 }
+
 use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize)]
 struct Message {
     vector:Vec<(String,String,bool)>,
-}
-fn save_to_remote(total_order:Vec<(String, String,bool)>)  {
-   
-    
-    let  mut client =  TcpStream::connect("127.0.0.1:6000").expect("Stream failed to connect");
-    client.set_nonblocking(true).expect("failed to initiate non-blocking");
-    println!("connect! ");
-    unsafe{
-
-    let message = Message { vector:total_order.clone() };
-    
-     let data = serde_json::to_vec(&message).unwrap();
-        
-
-    client.write(
-        slice::from_raw_parts(
-            &FileHeader {
-                size: data.len() as u32,
-            } as *const _ as *const u8,
-            size_of::<FileHeader>(),
-        )
-    ).unwrap();
- 
-    client.write(&data).unwrap();
-    println!("Vector sent");
-
-    }
-  
-        
- 
-    
-      
-    
-     
 }
 
 impl eframe::App for TemplateApp {
@@ -271,7 +291,9 @@ impl eframe::App for TemplateApp {
         egui::CentralPanel::default().show(ctx, |ui| {
           
             
-            ui.label(format!("Hello, {}!", self.name));
+            if ui.button("load").clicked(){
+            self.total_order=load_vector();
+            }
             let body_text_size = TextStyle::Body.resolve(ui.style()).size;
             use egui_extras::{Size, StripBuilder};
             StripBuilder::new(ui)
@@ -280,6 +302,9 @@ impl eframe::App for TemplateApp {
                 .vertical(|mut strip| {
                     strip.cell(|ui| {
                         egui::ScrollArea::horizontal().show(ui, |ui| {
+                            
+
+
                             let mut table=order_table::Table::default();
                             table.table_ui(ui,self);
                         });
