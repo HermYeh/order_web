@@ -1,6 +1,6 @@
-use chrono::{DateTime, Local};
+use chrono::{DateTime, FixedOffset, Local};
 use egui::{Color32, Label, Stroke, TextStyle};
-
+use chrono::TimeZone;
 use crate::TemplateApp;
 
 pub struct Table {
@@ -61,13 +61,13 @@ impl Table {
             }
           
         }
-
+        
         });
         header.col(|ui| {
             let sort_click=ui.add_sized(ui.available_size(),egui::Button::new("Check In").fill(egui::Color32::TRANSPARENT));
             if sort_click.clicked(){
                 let data_temp= table_data.total_order.clone();
-                table_data.total_order.sort_by_key(|k| k.1);
+                table_data.total_order.sort_by_key(|k| DateTime::parse_from_rfc3339(&k.1).unwrap());
                 if data_temp== table_data.total_order{
                     table_data.total_order.reverse();
                 }
@@ -80,7 +80,7 @@ impl Table {
             let sort_click=ui.add_sized(ui.available_size(),egui::Button::new("Wait Time").fill(egui::Color32::TRANSPARENT));
             if sort_click.clicked(){
                 let data_temp= table_data.total_order.clone();
-                table_data.total_order.sort_by_key(|k| k.1);
+                table_data.total_order.sort_by_key(|k| DateTime::parse_from_rfc3339(&k.1).unwrap());
                 if data_temp== table_data.total_order{
                     table_data.total_order.reverse();
                 }
@@ -112,11 +112,13 @@ impl Table {
                 ui.add_sized(ui.available_size(),Label::new(egui::RichText::new(table_data.total_order[rowindex].0.clone()).size(20.0)).selectable(false),);
             });
             row.col(|ui| {
-                ui.add_sized(ui.available_size(),Label::new(egui::RichText::new(table_data.total_order[rowindex].1.clone().format("%H:%M").to_string()).size(20.0)).selectable(false),);
+                ui.add_sized(ui.available_size(),Label::new(egui::RichText::new(DateTime::parse_from_rfc3339(&table_data.total_order[rowindex].1.clone()).unwrap().format("%H:%M").to_string()).size(20.0)).selectable(false),);
             });
             row.col(|ui| {
                 let time_now: DateTime<Local> = Local::now();
-                let time_wait = time_now-table_data.total_order[rowindex].1.clone();
+                let time_wait = time_now.to_utc()-(DateTime::parse_from_rfc3339(&table_data.total_order[rowindex].1.clone()).unwrap().to_utc());
+        
+             
                 let minutes = (time_wait.num_minutes()).to_string();
                
                

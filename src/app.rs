@@ -12,11 +12,21 @@ use eframe::{egui};
 use egui::{ Id, RichText, TextureHandle, Vec2};
 use image;
 use std::sync::mpsc::channel;
-use reqwest::Client;
-use wasm_bindgen_futures::spawn_local;
+use std::sync::mpsc::TryRecvError;
+use std::io::ErrorKind;
+use std::thread;
+use std::io::Read;
+use std::io::Write;
+
+
 use crate::order_table;
+
+const LOCAL: &str = "127.0.0.1:6000";
+const MSG_SIZE: usize = 32;
+
 #[derive(serde::Deserialize, serde::Serialize,Clone)]
 #[serde(default)]
+
 pub struct TemplateApp {
     // Example stuff:
     label: String,
@@ -24,7 +34,7 @@ pub struct TemplateApp {
 // This how you opt-out of serialization of a field
     pub order_number: Vec<String>,
     #[serde(skip)]
-    pub total_order:Vec<(String, DateTime<Local>,bool)>,
+    pub total_order:Vec<(String, String,bool)>,
     pub order_time:Vec<String>,
     pub selection: usize,
     rows: i32,
@@ -55,11 +65,14 @@ fn check_order(template_app:&mut TemplateApp){
             template_app.order_number.clear();
         } else {
             let time: DateTime<Local> = Local::now();
-            template_app.total_order.push((template_app.order_number.concat(),time,false));
+            println!("{}",time.to_rfc3339().to_string());
+            template_app.total_order.push((template_app.order_number.concat(),time.to_rfc3339(),false));
+
             template_app.order_number.clear();
+            
         }
         
-    
+        save_to_remote(template_app.total_order.clone());
       
     };
 }
@@ -168,6 +181,27 @@ impl<'a> Default for TemplateApp {
   
 }
 
+use std::{
+    net::TcpStream,
+    sync::mpsc,
+};
+use crossbeam::channel::unbounded;
+use lazy_static::lazy_static;
+use std::sync::Mutex;
+use std::sync::Arc;
+use std::ffi::CString;
+use std::mem::size_of;
+use std::slice;
+use std::{
+    io::{prelude::*, BufReader},
+    str,
+};
+#[derive(Debug, Copy, Clone)]
+#[repr(C, align(8))]
+struct FileHeader {
+    size: u32,
+    
+}
 impl TemplateApp {
     /// Called once before the first frame.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
@@ -179,42 +213,48 @@ impl TemplateApp {
         if let Some(storage) = cc.storage {
             return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
         }
-
+    
         Default::default()
     }
 }
 use serde::{Deserialize, Serialize};
-#[derive(Serialize)]
-struct SaveData<'a> {
-    key: &'a str,
-    value: &'a str,
+#[derive(Serialize, Deserialize)]
+struct Message {
+    vector:Vec<(String,String,bool)>,
 }
+fn save_to_remote(total_order:Vec<(String, String,bool)>)  {
+   
+    
+    let  mut client =  TcpStream::connect("127.0.0.1:6000").expect("Stream failed to connect");
+    client.set_nonblocking(true).expect("failed to initiate non-blocking");
+    println!("connect! ");
+    unsafe{
 
-#[derive(Deserialize)]
-struct LoadData {
-    value: String,
-}
+    let message = Message { vector:total_order.clone() };
+    
+     let data = serde_json::to_vec(&message).unwrap();
+        
 
-async fn save_to_remote(key: &str, value: &str) -> Result<(), reqwest::Error> {
-    let client = reqwest::Client::new();
-    let data = SaveData { key, value };
-    client.post("http://127.0.0.1:8080/save")
-        .json(&data)
-        .send()
-        .await?
-        .error_for_status()?;
-    Ok(())
-}
+    client.write(
+        slice::from_raw_parts(
+            &FileHeader {
+                size: data.len() as u32,
+            } as *const _ as *const u8,
+            size_of::<FileHeader>(),
+        )
+    ).unwrap();
+ 
+    client.write(&data).unwrap();
+    println!("Vector sent");
 
-async fn load_from_remote(key: &str) -> Result<String, reqwest::Error> {
-    let client = reqwest::Client::new();
-    let value: String = client.post("http://127.0.0.1:8080/load")
-        .json(&key)
-        .send()
-        .await?
-        .json()
-        .await?;
-    Ok(value)
+    }
+  
+        
+ 
+    
+      
+    
+     
 }
 
 impl eframe::App for TemplateApp {
@@ -229,21 +269,8 @@ impl eframe::App for TemplateApp {
      
   
         egui::CentralPanel::default().show(ctx, |ui| {
-            if ui.button("Save").clicked() {
-                let name = self.name.clone();
-                spawn_local(async move {
-                    save_to_remote("name", &name).await.unwrap();
-                });
-            }
-
-            if ui.button("Load").clicked() {
-                let name_clone = self.name.clone();
-                let mut app = self.clone();
-                spawn_local(async move {
-                    app.name = load_from_remote("name").await.unwrap_or_default();
-                });
-            }
-
+          
+            
             ui.label(format!("Hello, {}!", self.name));
             let body_text_size = TextStyle::Body.resolve(ui.style()).size;
             use egui_extras::{Size, StripBuilder};
