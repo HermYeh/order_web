@@ -1,22 +1,11 @@
 #![warn(clippy::all, rust_2018_idioms)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
-use crossbeam::channel::unbounded;
 
-use std::sync::mpsc::TryRecvError;
-use std::io::ErrorKind;
-use std::thread;
-use std::io::Read;
-use std::io::Write;
-use std::net::TcpStream;
-use eframe_template::app;
-use std::time::Duration;
-const LOCAL: &str = "127.0.0.1:6000";
-const MSG_SIZE: usize = 32;
+
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result<()> {
-    env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
-    
+
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([400.0, 300.0])

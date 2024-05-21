@@ -5,8 +5,7 @@ authors = ["Emil Ernerfeldt <emil.ernerfeldt@gmail.com>"]
 edition = "2021"
 include = ["LICENSE-APACHE", "LICENSE-MIT", "**/*.rs", "Cargo.toml"]
 rust-version = "1.76"
-[build-dependencies]
-tonic-build = "0.10"
+
 [package.metadata.docs.rs]
 all-features = true
 [dependencies]
@@ -24,16 +23,15 @@ serde = { version = "1", features = ["derive"] }
 egui_extras={ version = "0.27.2", features = ["all_loaders"] } 
 timer="*"
 chrono="*"
-crossbeam="*"
 
+
+ureq={ version = "2.9.7", features = ["json"] }
 # native:
-sqlite="0.36.0"
 serde_json = "1.0"
 wasm-bindgen-futures = "0.4"
 
-lazy_static="*"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-env_logger = "0.10"
+
 
 
 
