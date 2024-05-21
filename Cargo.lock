@@ -859,6 +859,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "crossbeam-channel"
+version = "0.5.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33480d6946193aa8033910124896ca395333cae7e2d1113d1fef6c3272217df2"
+dependencies = [
+ "crossbeam-utils",
+]
+
+[[package]]
 name = "crossbeam-deque"
 version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1037,15 +1046,16 @@ name = "eframe_template"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "crossbeam-channel",
  "eframe",
  "egui",
  "egui_extras",
+ "ehttp",
  "image 0.25.1",
  "log",
  "serde",
  "serde_json",
  "timer",
- "ureq",
  "wasm-bindgen-futures",
 ]
 
@@ -1121,6 +1131,8 @@ checksum = "59a81c221a1e4dad06cb9c9deb19aea1193a5eea084e8cd42d869068132bf876"
 dependencies = [
  "document-features",
  "js-sys",
+ "serde",
+ "serde_json",
  "ureq",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -3334,8 +3346,6 @@ dependencies = [
  "rustls",
  "rustls-pki-types",
  "rustls-webpki",
- "serde",
- "serde_json",
  "url",
  "webpki-roots",
 ]

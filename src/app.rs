@@ -2,8 +2,8 @@
 
 
 use egui::{ColorImage,Label, TextStyle, Ui};
-
-
+use ehttp::*;
+use crossbeam_channel::unbounded;
 use std::fs;
 use egui_extras::RetainedImage;
 use std::time::Duration;
@@ -13,11 +13,20 @@ use std::path::Path;
 use eframe::{egui};
 use egui::{ Id, RichText, TextureHandle, Vec2};
 use image;
-
-
+use std::sync::mpsc::channel;
+use std::sync::mpsc::TryRecvError;
+use std::io::ErrorKind;
+use std::thread;
+use std::io::Read;
+use std::io::Write;
 
 
 use crate::order_table;
+use serde::{Deserialize, Serialize};
+#[derive(Serialize, Deserialize,Clone,Debug)]
+struct Message {
+    vector:Vec<(String,String,bool)>,
+}
 
 
 
@@ -182,7 +191,7 @@ use std::{
     net::TcpStream,
     sync::mpsc,
 };
-use ureq;
+
 #[derive(Debug, Copy, Clone)]
 #[repr(C, align(8))]
 struct FileHeader {
@@ -194,19 +203,27 @@ struct FileHeader {
 const BUF_LEN: usize = 4096;
 use std::slice;
 use std::mem::size_of;
-fn load_vector()->Vec<(String,String,bool)>{
-    let my_data = Message {
-        vector: Vec::new(),
+use std::sync::Arc;
+use std::sync::Mutex;
+
+
+fn load_vector(sender:crossbeam_channel::Sender<Vec<(String,String,bool)>>)
+{
+    let empty=Message{
+        vector:Vec::new()
     };
-   
-    let response = ureq::get("http://127.0.0.1:3030/load")
-    .send_json(&my_data)   
-    .unwrap();
-        let msg=&response.into_string().unwrap();
-    println!("Received : {:?}",msg);
-        let message: Message = serde_json::from_str(msg).unwrap();
-        println!("Received vector: {:?}", message.vector);
-      message.vector
+ 
+      let request = ehttp::Request::json("http://127.0.0.1:3030/load",&empty).unwrap();
+  
+      let sender_clone=sender.clone();
+    ehttp::fetch(request, move |response| {
+        let resp= response.unwrap();
+        let outcome:Message=resp.json().unwrap();
+        
+        sender_clone.send(outcome.vector).unwrap();
+  
+     });
+  
 }
 
 impl TemplateApp {
@@ -227,11 +244,6 @@ impl TemplateApp {
     }
 }
 
-use serde::{Deserialize, Serialize};
-#[derive(Serialize, Deserialize)]
-struct Message {
-    vector:Vec<(String,String,bool)>,
-}
 
 impl eframe::App for TemplateApp {
     /// Called by the frame work to save state before shutdown.
@@ -253,9 +265,14 @@ impl eframe::App for TemplateApp {
                
             }
             if ui.button("load").clicked(){
+                let (rx,tx)=crossbeam_channel::unbounded();
+             
+                load_vector(rx);
               
-                self.total_order=  load_vector();
-               
+                match tx.recv(){
+                    Ok(msg) => { self.total_order=msg},
+                    Err(_) =>{},
+               }
             }
             
             let body_text_size = TextStyle::Body.resolve(ui.style()).size;

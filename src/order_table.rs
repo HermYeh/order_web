@@ -1,6 +1,8 @@
 use chrono::{DateTime, FixedOffset, Local};
 use egui::{Color32, Label, Stroke, TextStyle};
 use chrono::TimeZone;
+use ehttp::Request;
+use std::io::Bytes;
 use crate::TemplateApp;
 
 pub struct Table {
@@ -10,11 +12,14 @@ pub struct Table {
    
 }
 
+use std::ffi::CString;
+use std::mem::size_of;
+use std::slice;
 use std::{
     io::{prelude::*, BufReader},
     str,
 };
-
+use std::net::TcpStream;
 struct FileHeader {
     size: u32,
     
@@ -35,21 +40,30 @@ use serde::{Deserialize, Serialize};
 struct Message {
     vector:Vec<(String,String,bool)>,
 }
-use ureq;
+
 
 pub fn save_to_remote(total_order:Vec<(String, String,bool)>)  {
-   
-    
+ 
     let my_data = Message {
         vector: total_order,
     };
-    println!("my_data: {:?}",my_data.vector);
-    let response = ureq::post("http://127.0.0.1:3030/data")
-        .send_json(&my_data).unwrap();
-       
-        
+    
+    let request = Request {
+        headers: ehttp::Headers::new(&[
+            ("Accept", "*/*"),
+            ("Content-Type", "text/plain; charset=utf-8"),
+            ("Access-Control-Allow-Origin","*"),
+        ]), ..ehttp::Request::json("http://127.0.0.1:3030/data",&my_data).unwrap()};
+  
 
-println!("Response: {:?}", response.into_string().unwrap());
+    println!("my_data: {:?}",my_data.vector);
+   
+    ehttp::fetch(request, move |response| {
+       println!("Response: {:?}", response.unwrap().text());
+       
+    });
+
+
 
 
 }
@@ -205,7 +219,7 @@ fn toggle_row_selection(select:&mut TemplateApp, row_index: usize, row_response:
         select.payment.remove(row_index);
         select.payment.push(false);
         select.selection=999;
-       save_to_remote(select.total_order.clone());
+     save_to_remote(select.total_order.clone());
     
     }
 }

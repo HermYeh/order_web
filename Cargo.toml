@@ -23,9 +23,8 @@ serde = { version = "1", features = ["derive"] }
 egui_extras={ version = "0.27.2", features = ["all_loaders"] } 
 timer="*"
 chrono="*"
-
-
-ureq={ version = "2.9.7", features = ["json"] }
+crossbeam-channel="0.5.13"
+ehttp={ version = "0.5.0", features = ["json"] }
 # native:
 serde_json = "1.0"
 wasm-bindgen-futures = "0.4"
