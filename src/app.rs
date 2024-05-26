@@ -1,4 +1,3 @@
-/// We derive Deserialize/Serialize so we can persist app state on shutdown.
 
 
 use egui::{ColorImage,Label, TextStyle, Ui};
@@ -215,21 +214,22 @@ fn load_vector(sender:crossbeam_channel::Sender<Vec<(String,String,bool)>>)
  
     let request = Request{
         headers: ehttp::Headers::new(&[
-            ("Accept", "*/*"),
             ("Content-Type", "application/json"),
-            ("Access-Control-Allow-Origin","https://ts.maya.se:3030"),
-         
-        ]),..Request::json("https://ts.maya.se:3030/load",&empty).unwrap()};
+            ("Access-Control-Allow-Origin","https://ts.maya.se/"),
+            ("Origin","https://ts.maya.se/"),
+        ]),..Request::json("https://ts.maya.se/load",&empty).unwrap()};
   
     
       let sender_clone=sender.clone();
     ehttp::fetch(request, move |response| {
+  
         let resp= response.unwrap();
         
         let outcome:Message=resp.json().unwrap();
         
         sender_clone.send(outcome.vector).unwrap();
   
+
      });
   
 }

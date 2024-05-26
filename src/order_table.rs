@@ -45,30 +45,29 @@ struct Message {
 
 pub fn save_to_remote(total_order:Vec<(String, String,bool)>)  {
  
-    let my_data = Message {
-        vector: total_order,
-    };
     
   
 
     
     
     
-    let request = Request{
+/*     let request = Request{
         headers: ehttp::Headers::new(&[
-            ("Accept", "*/*"),
             ("Content-Type", "application/json"),
-            ("Access-Control-Allow-Origin","https://ts.maya.se:3030"),
-         
-        ]),..Request::json("https://ts.maya.se:3030/data?",&my_data).unwrap()};
-  
+            ("Access-Control-Request-Headers","x-requested-with"),
+            ("Origin","https://ts.maya.se/"),
+        ]),..Request::json("https://ts.maya.se/data",&total_order).unwrap()};
+   */
     
-    println!("my_data: {:?}",my_data.vector);
-   
-    ehttp::fetch(request, move |response| {
+    println!("my_data: {:?}",total_order);
+    let serialized_data = serde_json::to_string(&total_order).unwrap();
+    
+    ehttp::Request::post("https://ts.maya.se/data", serialized_data.into_bytes());
+   /*  ehttp::fetch(request, move |response| {
+ 
        println!("Response: {:?}",response);
        
-    });
+    }); */
 
 
 
@@ -207,7 +206,7 @@ impl Table {
                 ui.add_sized(ui.available_size(),Label::new(egui::RichText::new(table_data.order_number.concat()).size(20.0)).selectable(false),);
             });
            
-
+        
         });
         
    
