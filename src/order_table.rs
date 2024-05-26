@@ -1,4 +1,5 @@
 use chrono::{DateTime, FixedOffset, Local};
+
 use egui::{Color32, Label, Stroke, TextStyle};
 use chrono::TimeZone;
 use ehttp::Request;
@@ -48,18 +49,24 @@ pub fn save_to_remote(total_order:Vec<(String, String,bool)>)  {
         vector: total_order,
     };
     
-    let request = Request {
-        headers: ehttp::Headers::new(&[
-            ("Accept", "*/*"),
-            ("Content-Type", "text/plain; charset=utf-8"),
-            ("Access-Control-Allow-Origin","*"),
-        ]), ..ehttp::Request::json("http://127.0.0.1:3030/data",&my_data).unwrap()};
   
 
+    
+    
+    
+    let request = Request{
+        headers: ehttp::Headers::new(&[
+            ("Accept", "*/*"),
+            ("Content-Type", "application/json"),
+            ("Access-Control-Allow-Origin","https://ts.maya.se:3030"),
+         
+        ]),..Request::json("https://ts.maya.se:3030/data?",&my_data).unwrap()};
+  
+    
     println!("my_data: {:?}",my_data.vector);
    
     ehttp::fetch(request, move |response| {
-       println!("Response: {:?}", response.unwrap().text());
+       println!("Response: {:?}",response);
        
     });
 

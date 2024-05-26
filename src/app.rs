@@ -213,11 +213,19 @@ fn load_vector(sender:crossbeam_channel::Sender<Vec<(String,String,bool)>>)
         vector:Vec::new()
     };
  
-      let request = ehttp::Request::json("http://127.0.0.1:3030/load",&empty).unwrap();
+    let request = Request{
+        headers: ehttp::Headers::new(&[
+            ("Accept", "*/*"),
+            ("Content-Type", "application/json"),
+            ("Access-Control-Allow-Origin","https://ts.maya.se:3030"),
+         
+        ]),..Request::json("https://ts.maya.se:3030/load",&empty).unwrap()};
   
+    
       let sender_clone=sender.clone();
     ehttp::fetch(request, move |response| {
         let resp= response.unwrap();
+        
         let outcome:Message=resp.json().unwrap();
         
         sender_clone.send(outcome.vector).unwrap();
@@ -261,8 +269,9 @@ impl eframe::App for TemplateApp {
           
             
             if ui.button("save").clicked(){
-                 order_table::save_to_remote(self.total_order.clone())
-               
+              
+                 order_table::save_to_remote(self.total_order.clone());
+                
             }
             if ui.button("load").clicked(){
                 let (rx,tx)=crossbeam_channel::unbounded();
@@ -285,7 +294,7 @@ impl eframe::App for TemplateApp {
                         egui::ScrollArea::horizontal().show(ui, |ui| {
                             
 
-
+                            
                             let mut table=order_table::Table::default();
                             table.table_ui(ui,self);
                         });
