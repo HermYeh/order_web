@@ -38,38 +38,34 @@ impl Default for Table {
 }
 use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize)]
-struct Message {
-    vector:Vec<(String,String,bool)>,
+struct Msg {
+    vector:Vec<(String,String,String)>,
 }
 
-
-pub fn save_to_remote(total_order:Vec<(String, String,bool)>)  {
+use serde_json::value::Serializer;
+use serde_json::Deserializer;
+pub fn save_to_remote(total_order:Vec<(String, String,String)>)  {
  
+    let output=Msg{
+        vector:total_order.clone(),
+    };
+  
     
   
-
-    
-    
-    
-/*     let request = Request{
+    println!("my_data: {:?}",total_order);
+   
+     let request = Request{
         headers: ehttp::Headers::new(&[
             ("Content-Type", "application/json"),
-            ("Access-Control-Request-Headers","x-requested-with"),
-            ("Origin","https://ts.maya.se/"),
-        ]),..Request::json("https://ts.maya.se/data",&total_order).unwrap()};
-   */
+        ]),..Request::json("https://settingupdate.com/new/order.php",&output).unwrap()};
+  
     
-    println!("my_data: {:?}",total_order);
-    let serialized_data = serde_json::to_string(&total_order).unwrap();
-    
-    ehttp::Request::post("https://ts.maya.se/data", serialized_data.into_bytes());
-   /*  ehttp::fetch(request, move |response| {
+        ehttp::fetch(request, move |response| {
  
-       println!("Response: {:?}",response);
-       
-    }); */
-
-
+            println!("Response: {:?}",response);
+            
+         });
+     
 
 
 }
@@ -84,12 +80,13 @@ impl Table {
             width: 0.0,
             color: Color32::TRANSPARENT,
         };
-    let available_height = ui.available_height();
+    let available_height = ui.available_height()-250.00;
+    let wsize=ui.available_width();
     let mut table = TableBuilder::new(ui).cell_layout(egui::Layout::left_to_right(egui::Align::LEFT))
         .column(Column::auto())
-        .column(Column::exact(80.00))
-        .column(Column::exact(80.00))
-        .column(Column::exact(80.00))
+        .column(Column::exact(wsize/4.00))
+        .column(Column::exact(wsize/4.00))
+        .column(Column::exact(wsize/4.00))
         .resizable(false)
         .striped(self.striped)
         .min_scrolled_height(0.0)
@@ -182,11 +179,17 @@ impl Table {
                 let response = ui
                 .add_sized(
                     ui.available_size(),
-                    egui::Button::new(if table_data.total_order[rowindex].2 {"Paid"}else{""}),
+                    egui::Button::new(if table_data.total_order[rowindex].2=="1" {"Paid"}else{""}),
                 );
                 if response.clicked(){
-                 
-                    table_data.total_order[rowindex].2 =!table_data.total_order[rowindex].2;
+                 if table_data.total_order[rowindex].2=="1"{
+
+                    table_data.total_order[rowindex].2="0".to_owned();
+                 }else{
+                    table_data.total_order[rowindex].2="1".to_owned();
+                 }
+
+              
                   
                 }
             });

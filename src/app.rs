@@ -1,5 +1,4 @@
 
-
 use egui::{ColorImage,Label, TextStyle, Ui};
 use ehttp::*;
 use crossbeam_channel::unbounded;
@@ -23,11 +22,15 @@ use std::io::Write;
 use crate::order_table;
 use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize,Clone,Debug)]
-struct Message {
-    vector:Vec<(String,String,bool)>,
+struct Msg {
+    vector:Vec<(String,String,String)>,
 }
 
-
+enum Download {
+    None,
+    Load,
+    Done(ehttp::Result<ehttp::Response>),
+}
 
 #[derive(serde::Deserialize, serde::Serialize,Clone)]
 #[serde(default)]
@@ -39,8 +42,9 @@ pub struct TemplateApp {
 // This how you opt-out of serialization of a field
     pub order_number: Vec<String>,
     #[serde(skip)]
-    pub total_order:Vec<(String, String,bool)>,
+    pub total_order:Vec<(String, String,String)>,
     pub order_time:Vec<String>,
+    pub paid:Vec<String>,
     pub selection: usize,
     rows: i32,
     row_index: i32,
@@ -48,8 +52,11 @@ pub struct TemplateApp {
     pub payment: Vec<bool>,
     pub scroll_to_row: Option<usize>,
     name:String,
+    #[serde(skip)]
+    respond: Arc<Mutex<Download>>,
 }
-
+use serde_json::value::Serializer;
+use serde_json::Deserializer;
 fn check_order(template_app:&mut TemplateApp){
      
     if template_app.order_number.len()==4{
@@ -65,18 +72,23 @@ fn check_order(template_app:&mut TemplateApp){
         if !contains_first_value.is_empty() {
           
             for index in contains_first_value {
-                template_app.total_order.remove(index);
+               
+                order_table::save_to_remote(vec![template_app.total_order.remove(index)]);
+                
             }
             template_app.order_number.clear();
+            
         } else {
             let time: DateTime<Local> = Local::now();
             println!("{}",time.to_rfc3339().to_string());
-            template_app.total_order.push((template_app.order_number.concat(),time.to_rfc3339(),false));
-
+            let order=(template_app.order_number.concat(),time.to_rfc3339(),"0".to_owned());
+          
+            order_table::save_to_remote(vec![order.clone()]);
+            template_app.total_order.push(order);
             template_app.order_number.clear();
             
         }
-        order_table::save_to_remote(template_app.total_order.clone());
+     
       
     };
 }
@@ -131,12 +143,12 @@ fn buttons(template_app:&mut TemplateApp,ui:&mut Ui){
     ui.horizontal(|ui| {     
             let button = ui.add_sized(
                 [wsize/3.0,60.0],
-                egui::Button::new("<".to_string())
+                egui::Button::new("@".to_string())
             ) ;
+
             if button.clicked(){
-                template_app.order_number.pop();
-       
-                check_order(template_app);
+                let respond_store = template_app.respond.clone();
+                load_vector(respond_store);
             }
             let button = ui.add_sized(
                 [wsize/3.0,60.0],
@@ -181,6 +193,8 @@ impl<'a> Default for TemplateApp {
             payment: vec![false;50],
             scroll_to_row: None,
             name:"".to_owned(),
+            respond: Arc::new(Mutex::new(Download::Load)),
+            paid:Vec::new(),
         }
     }
   
@@ -205,32 +219,16 @@ use std::mem::size_of;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-
-fn load_vector(sender:crossbeam_channel::Sender<Vec<(String,String,bool)>>)
-{
-    let empty=Message{
-        vector:Vec::new()
-    };
+fn load_vector(respond_store: Arc<Mutex<Download>>)
+{  
+    let request = Request::get("https://settingupdate.com/new/load.php");
+               ehttp::fetch(request, move |response| {
+                *respond_store.lock().unwrap()=Download::Done(response);
+          
+                });
+              
  
-    let request = Request{
-        headers: ehttp::Headers::new(&[
-            ("Content-Type", "application/json"),
-            ("Access-Control-Allow-Origin","https://ts.maya.se/"),
-            ("Origin","https://ts.maya.se/"),
-        ]),..Request::json("https://ts.maya.se/load",&empty).unwrap()};
-  
     
-      let sender_clone=sender.clone();
-    ehttp::fetch(request, move |response| {
-  
-        let resp= response.unwrap();
-        
-        let outcome:Message=resp.json().unwrap();
-        
-        sender_clone.send(outcome.vector).unwrap();
-  
-
-     });
   
 }
 
@@ -250,7 +248,18 @@ impl TemplateApp {
 
         Default::default()
     }
+   
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Order {
+    order_number: String,
+    check_in: String,
+    payment:String,
+}
+use std::{net::TcpListener, thread::spawn};
+
+use std::env;
 
 
 impl eframe::App for TemplateApp {
@@ -267,22 +276,27 @@ impl eframe::App for TemplateApp {
   
         egui::CentralPanel::default().show(ctx, |ui| {
           
-            
-            if ui.button("save").clicked(){
-              
-                 order_table::save_to_remote(self.total_order.clone());
-                
-            }
-            if ui.button("load").clicked(){
-                let (rx,tx)=crossbeam_channel::unbounded();
+        
+            let ctx = ctx.clone();
+          
+           /*  let respond_store = self.respond.clone();
+      
+                 
+                let getrequest = Request::get("https://ts.maya.se/1.php");
+
+         
+                ehttp::fetch(getrequest, move |response| {
+                    
+                    if response.unwrap().text()==Some("1"){
+                        
+                        load_vector(respond_store);
+                    }
              
-                load_vector(rx);
-              
-                match tx.recv(){
-                    Ok(msg) => { self.total_order=msg},
-                    Err(_) =>{},
-               }
-            }
+                }); */
+                    
+                
+        
+        
             
             let body_text_size = TextStyle::Body.resolve(ui.style()).size;
             use egui_extras::{Size, StripBuilder};
@@ -292,18 +306,49 @@ impl eframe::App for TemplateApp {
                 .vertical(|mut strip| {
                     strip.cell(|ui| {
                         egui::ScrollArea::horizontal().show(ui, |ui| {
-                            
-
-                            
                             let mut table=order_table::Table::default();
                             table.table_ui(ui,self);
                         });
                     });
                   
                 });
-         
+           
+               let copy= &self.respond.clone();
+                let download: &Download=&copy.lock().unwrap();
+                
           
-          
+            let respond_store = self.respond.clone();
+           
+                match download {
+                    Download::None => {}
+                    Download::Load=>{
+                    
+                    
+                        load_vector(respond_store);
+                      
+                    }
+                    Download::Done(response) => match response {
+                        Err(err) => {
+                            ui.label(err);
+                        }
+                        Ok(response) => {
+                            self.respond=Arc::new(Mutex::new(Download::None));
+                            let text=  &response.text();
+                            println!("{}", text.unwrap());
+                            let orders: Vec<Order> = serde_json::from_str(text.unwrap()).expect("JSON was not well-formatted");
+                            println!("{:?}", &orders);
+                          self.total_order.clear();
+                            for order in orders{
+                       
+                                self.total_order.push((order.order_number,order.check_in, order.payment));
+                                println!("{:?}", &self.total_order);
+                            }
+                            
+                        
+                           
+                        }
+                    },
+                }
             
             
         });
@@ -311,20 +356,14 @@ impl eframe::App for TemplateApp {
   
         
         egui::TopBottomPanel::bottom("bot").show(ctx, |ui| {
-         /*    ui.with_layout(egui::Layout::top_down_justified(egui::Align::Center), |ui| {
-               
-            ui.add_space(100.0);
-            let time_now: DateTime<Local> = Local::now();
-            ui.add(Label::new(egui::RichText::new(time_now.format("%H:%M:%S").to_string()).size(50.0)));
-            ui.add_space(100.0);
-        }); */
+  
       
             buttons(self, ui)
     
       
     });
-  /*    ctx.request_repaint();
-     std::thread::sleep(Duration::from_millis(1)); */
+    ctx.request_repaint();
+  
     }
 }
 
