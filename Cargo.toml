@@ -17,6 +17,13 @@ eframe = { version = "0.27.2", default-features = false, features = [
     "persistence",   # Enable restoring app state when restarting the app.
 ] }
 log = "0.4"
+workflow-websocket = "0.12.1"
+async-trait="0.1.80"
+workflow-log="0.12.1"
+
+workflow-core="0.12.1"
+tokio="1.38.0"
+futures="0.3.30"
 image="0.25.1"
 # You only need serde if you want app persistence:
 serde = { version = "1", features = ["derive"] }

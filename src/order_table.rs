@@ -1,10 +1,38 @@
 use chrono::{DateTime, FixedOffset, Local};
 
-use egui::{Color32, Label, Stroke, TextStyle};
+use egui::{Align, Color32, Label, Stroke, TextStyle};
 use chrono::TimeZone;
 use ehttp::Request;
 use std::io::Bytes;
 use crate::TemplateApp;
+use std::fmt;
+#[derive(Serialize, Deserialize, Clone, Debug,PartialEq,Eq)]
+pub struct Order {
+    pub order_number: String,
+    pub check_in: String,
+    pub payment: String,
+}
+impl fmt::Display for Order {
+    // This trait requires `fmt` with this exact signature.
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let _ = f;
+        // Write strictly the first element into the supplied output
+        // stream: `f`. Returns `fmt::Result` which indicates whether the
+        // operation succeeded or failed. Note that `write!` uses syntax which
+        // is very similar to `println!`.
+        write!(f, "{}", self)
+    }
+}
+impl PartialOrd for Order {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for Order {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.order_number.cmp(&other.order_number)
+    }
+}
 
 pub struct Table {
     striped: bool,
@@ -44,20 +72,19 @@ struct Msg {
 
 use serde_json::value::Serializer;
 use serde_json::Deserializer;
-pub fn save_to_remote(total_order:Vec<(String, String,String)>)  {
+pub fn save_to_remote(total_order:Order)  {
  
-    let output=Msg{
-        vector:total_order.clone(),
-    };
+    
+    
+     
   
     
   
-    println!("my_data: {:?}",total_order);
    
      let request = Request{
         headers: ehttp::Headers::new(&[
             ("Content-Type", "application/json"),
-        ]),..Request::json("https://settingupdate.com/new/order.php",&output).unwrap()};
+        ]),..Request::json("https://settingupdate.com/new/order.php",&total_order).unwrap()};
   
     
         ehttp::fetch(request, move |response| {
@@ -66,6 +93,30 @@ pub fn save_to_remote(total_order:Vec<(String, String,String)>)  {
             
          });
      
+
+
+}
+pub fn update_to_remote(order:Order)  {
+ 
+    
+    
+     
+  
+    
+  
+   
+    let request = Request{
+       headers: ehttp::Headers::new(&[
+           ("Content-Type", "application/json"),
+       ]),..Request::json("https://settingupdate.com/new/delete.php",&order).unwrap()};
+ 
+   
+       ehttp::fetch(request, move |response| {
+
+           println!("Response: {:?}",response);
+           
+        });
+    
 
 
 }
@@ -80,13 +131,13 @@ impl Table {
             width: 0.0,
             color: Color32::TRANSPARENT,
         };
-    let available_height = ui.available_height()-250.00;
+    let available_height = ui.available_height()-280.00;
     let wsize=ui.available_width();
-    let mut table = TableBuilder::new(ui).cell_layout(egui::Layout::left_to_right(egui::Align::LEFT))
-        .column(Column::auto())
-        .column(Column::exact(wsize/4.00))
-        .column(Column::exact(wsize/4.00))
-        .column(Column::exact(wsize/4.00))
+    let mut table = TableBuilder::new(ui).cell_layout(egui::Layout::left_to_right(egui::Align::TOP))
+        .column(Column::exact(wsize/4.00-10.0))
+        .column(Column::exact(wsize/4.00-10.0))
+        .column(Column::exact(wsize/4.00-10.0))
+        .column(Column::exact(wsize/4.00-10.0))
         .resizable(false)
         .striped(self.striped)
         .min_scrolled_height(0.0)
@@ -94,7 +145,7 @@ impl Table {
         
         table = table.sense(egui::Sense::click());
         if let Some(row_index) = table_data.scroll_to_row.take() {
-            table = table.scroll_to_row(row_index, None);
+            table = table.scroll_to_row(row_index, Some(Align::BOTTOM));
         }
     
                 
@@ -117,7 +168,7 @@ impl Table {
             let sort_click=ui.add_sized(ui.available_size(),egui::Button::new("Check In").fill(egui::Color32::TRANSPARENT));
             if sort_click.clicked(){
                 let data_temp= table_data.total_order.clone();
-                table_data.total_order.sort_by_key(|k| DateTime::parse_from_rfc3339(&k.1).unwrap());
+                table_data.total_order.sort_by_key(|k| DateTime::parse_from_rfc3339(&k.check_in).unwrap());
                 if data_temp== table_data.total_order{
                     table_data.total_order.reverse();
                 }
@@ -130,7 +181,7 @@ impl Table {
             let sort_click=ui.add_sized(ui.available_size(),egui::Button::new("Wait Time").fill(egui::Color32::TRANSPARENT));
             if sort_click.clicked(){
                 let data_temp= table_data.total_order.clone();
-                table_data.total_order.sort_by_key(|k| DateTime::parse_from_rfc3339(&k.1).unwrap());
+                table_data.total_order.sort_by_key(|k| DateTime::parse_from_rfc3339(&k.check_in).unwrap());
                 if data_temp== table_data.total_order{
                     table_data.total_order.reverse();
                 }
@@ -154,19 +205,18 @@ impl Table {
             let rowindex=row.index();
             if table_data.selection==row_index{
                 row.set_selected(true);
-            }else {
-                row.set_selected(false);
+                
             }
             
             row.col(|ui| {
-                ui.add_sized(ui.available_size(),Label::new(egui::RichText::new(table_data.total_order[rowindex].0.clone()).size(20.0)).selectable(false),);
+                ui.add_sized(ui.available_size(),Label::new(egui::RichText::new(table_data.total_order[rowindex].order_number.clone()).size(20.0)).selectable(false),);
             });
             row.col(|ui| {
-                ui.add_sized(ui.available_size(),Label::new(egui::RichText::new(DateTime::parse_from_rfc3339(&table_data.total_order[rowindex].1.clone()).unwrap().format("%H:%M").to_string()).size(20.0)).selectable(false),);
+                ui.add_sized(ui.available_size(),Label::new(egui::RichText::new(DateTime::parse_from_rfc3339(&table_data.total_order[rowindex].check_in.clone()).unwrap().format("%H:%M").to_string()).size(20.0)).selectable(false),);
             });
             row.col(|ui| {
                 let time_now: DateTime<Local> = Local::now();
-                let time_wait = time_now.to_utc()-(DateTime::parse_from_rfc3339(&table_data.total_order[rowindex].1.clone()).unwrap().to_utc());
+                let time_wait = time_now.to_utc()-(DateTime::parse_from_rfc3339(&table_data.total_order[rowindex].check_in.clone()).unwrap().to_utc());
         
              
                 let minutes = (time_wait.num_minutes()).to_string();
@@ -179,21 +229,21 @@ impl Table {
                 let response = ui
                 .add_sized(
                     ui.available_size(),
-                    egui::Button::new(if table_data.total_order[rowindex].2=="1" {"Paid"}else{""}),
+                    egui::Button::new(if table_data.total_order[rowindex].check_in=="1" {"Paid"}else{""}),
                 );
                 if response.clicked(){
-                 if table_data.total_order[rowindex].2=="1"{
-
-                    table_data.total_order[rowindex].2="0".to_owned();
+                 if table_data.total_order[rowindex].payment=="1"{
+                    
+                    table_data.total_order[rowindex].payment="0".to_owned();
                  }else{
-                    table_data.total_order[rowindex].2="1".to_owned();
+                    table_data.total_order[rowindex].payment="1".to_owned();
                  }
-
-              
+                
+                 update_to_remote(table_data.total_order[rowindex].clone());
                   
                 }
             });
-            
+      
             toggle_row_selection(table_data,row_index, &row.response());
          
         });
@@ -202,8 +252,6 @@ impl Table {
         body.row(20.0, |mut row| {
             if table_data.selection==table_data.total_order.len(){
                 row.set_selected(true);
-            }else {
-                row.set_selected(false);
             }
             row.col(|ui| {
                 ui.add_sized(ui.available_size(),Label::new(egui::RichText::new(table_data.order_number.concat()).size(20.0)).selectable(false),);
@@ -220,15 +268,17 @@ impl Table {
 }  
 fn toggle_row_selection(select:&mut TemplateApp, row_index: usize, row_response: &egui::Response) {
     if row_response.clicked() {
-        select.selection=row_index;
-    }
-    if row_response.double_clicked() {
+
+        if select.selection==row_index{
+            let delete=select.total_order.remove(row_index);
+            select.backup.push(delete.clone());
+            save_to_remote( delete);
      
-        select.total_order.remove(row_index);
-        select.payment.remove(row_index);
-        select.payment.push(false);
-        select.selection=999;
-     save_to_remote(select.total_order.clone());
-    
+            select.selection=999;
+
+        }else{
+            select.selection=row_index
+        }
     }
+
 }
