@@ -4,8 +4,14 @@ use egui::{Align, Color32, Label, Stroke, TextStyle};
 use chrono::TimeZone;
 use ehttp::Request;
 use std::io::Bytes;
-use crate::TemplateApp;
+
+use app::TemplateApp;
+
+use super::app;
+use app::send_notification;
+
 use std::fmt;
+
 #[derive(Serialize, Deserialize, Clone, Debug,PartialEq,Eq)]
 pub struct Order {
     pub order_number: String,
@@ -14,7 +20,7 @@ pub struct Order {
 }
 impl fmt::Display for Order {
     // This trait requires `fmt` with this exact signature.
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let _ = f;
         // Write strictly the first element into the supplied output
         // stream: `f`. Returns `fmt::Result` which indicates whether the
@@ -131,7 +137,7 @@ impl Table {
             width: 0.0,
             color: Color32::TRANSPARENT,
         };
-    let available_height = ui.available_height()-280.00;
+    let available_height = ui.available_height()-table_data.height-90.0;
     let wsize=ui.available_width();
     let mut table = TableBuilder::new(ui).cell_layout(egui::Layout::left_to_right(egui::Align::TOP))
         .column(Column::exact(wsize/4.00-10.0))
@@ -145,7 +151,7 @@ impl Table {
         
         table = table.sense(egui::Sense::click());
         if let Some(row_index) = table_data.scroll_to_row.take() {
-            table = table.scroll_to_row(row_index, Some(Align::BOTTOM));
+            table = table.scroll_to_row(row_index, Some(Align::TOP));
         }
     
                 
@@ -189,7 +195,7 @@ impl Table {
             }
         });
         header.col(|ui| {
-          ui.add_sized(ui.available_size(),egui::Button::new("Payment").fill(egui::Color32::TRANSPARENT));
+          ui.add_sized(ui.available_size(),egui::Button::new("Notify").fill(egui::Color32::TRANSPARENT));
      
         })
         ;
@@ -229,14 +235,15 @@ impl Table {
                 let response = ui
                 .add_sized(
                     ui.available_size(),
-                    egui::Button::new(if table_data.total_order[rowindex].check_in=="1" {"Paid"}else{""}),
+                    egui::Button::new(if table_data.total_order[rowindex].payment=="1" {"Sent"}else if table_data.total_order[rowindex].payment=="2" {"Received"} else {""}),
                 );
                 if response.clicked(){
-                 if table_data.total_order[rowindex].payment=="1"{
+                 if table_data.total_order[rowindex].payment=="0"{
                     
-                    table_data.total_order[rowindex].payment="0".to_owned();
+                    send_notification(table_data.total_order[rowindex].order_number.clone());
+                 
                  }else{
-                    table_data.total_order[rowindex].payment="1".to_owned();
+                
                  }
                 
                  update_to_remote(table_data.total_order[rowindex].clone());

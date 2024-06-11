@@ -23,16 +23,46 @@ use super::order_table::save_to_remote;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
-
-
-
-
-
 use std::sync::Arc;
 // use tokio::sync::mpsc::*;
 // use tungstenite::Message;
 
 
+use std::collections::VecDeque;
+
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+
+struct LimitedVecDeque<T> {
+    deque: VecDeque<T>,
+    max_size: usize,
+}
+
+impl<T> LimitedVecDeque<T> {
+    fn new(max_size: usize) -> Self {
+        Self {
+            deque: VecDeque::with_capacity(max_size),
+            max_size,
+        }
+    }
+
+    fn push(&mut self, value: T) {
+        if self.deque.len() == self.max_size {
+            self.deque.pop_front();
+        }
+        self.deque.push_back(value);
+    }
+    fn iter(&self) -> std::collections::vec_deque::Iter<'_, T> {
+        self.deque.iter()
+    }
+    fn get(&self) -> &VecDeque<T> {
+        &self.deque
+    }
+    fn len(&self) -> usize {
+        self.deque.len()
+    }
+  
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct Msg {
@@ -70,25 +100,33 @@ pub struct TemplateApp {
     pub backup: Vec<Order>,
     #[serde(skip)]
     last_update: i64,
-    height:f32,
+   pub height:f32,
     button:String,
-    logs:Vec<String>,
+    #[serde(skip)]
+    logs:LimitedVecDeque<String>,
 }
 use serde_json::value::Serializer;
 use serde_json::Deserializer;
+
+
+
+
 fn check_order(template_app: &mut TemplateApp) {
     
    
     if template_app.order_number.len() == 4 {
         let backup_size=template_app.backup.len();
         let backup_data: Order;
+        let log =template_app.order_number.concat();
+        let time: DateTime<Local> = Local::now();
+        let now =time.format("%H:%M");
         if template_app.order_number.concat() == "0000" {
             if backup_size>0{
             let backup = template_app.backup.pop();
             match backup {
                 Some(data) => {
                     backup_data = data.clone();
-
+                    
                     save_to_remote(data);
                     let target_first_value = backup_data.clone().order_number;
                     
@@ -111,16 +149,17 @@ fn check_order(template_app: &mut TemplateApp) {
                             template_app.total_order.remove(index);
                         }
                         template_app.order_number.clear();
+                        template_app.logs.push(format!("delete last entry"));
                     } else {
                         template_app.total_order.push(backup_data.clone());
                         template_app.order_number.clear();
                         template_app.selection = template_app.total_order.len() - 1;
-                        template_app.scroll_to_row = Some(template_app.selection);
+                        template_app.scroll_to_row                                           = Some(template_app.selection);
                     }
                 }
                 None => {}
             };
-
+            
             template_app.order_number.clear();
             template_app.selection = 999;
             }
@@ -142,17 +181,21 @@ fn check_order(template_app: &mut TemplateApp) {
                 .collect();
             if !contains_first_value.is_empty() {
                 for index in contains_first_value {
-                    template_app
-                        .backup
-                        .push(template_app.total_order[index].clone());
-                    template_app.logs.push(format!("order# {} Checkout!",template_app.total_order[index].clone()));
-                    order_table::save_to_remote(template_app.total_order.remove(index));
-                }
+                   
+                    let data =template_app.total_order.remove(index);
+                    template_app.backup.push(data.clone());
+                    
+                   
+                    template_app.logs.push(format!("order# {} Check out!@ {}",log,now));
+                
+                    order_table::save_to_remote(data);
+
+                };
                 template_app.order_number.clear();
           
             } else {
                 let time: DateTime<Local> = Local::now();
-                println!("{}", time.to_rfc3339().to_string());
+           
                 let order = Order{
                     order_number: template_app.order_number.concat(),
                     check_in: time.to_rfc3339(),
@@ -160,7 +203,9 @@ fn check_order(template_app: &mut TemplateApp) {
                 
                    
                 };
-                template_app.logs.push(format!("order# {} Checkin!",order.order_number));
+                template_app.logs.push(format!("order# {} Check in!@ {}",log,now));
+              
+            
                 template_app.backup.push(order.clone());
                 order_table::save_to_remote(order.clone());
                 template_app.total_order.push(order);
@@ -173,24 +218,25 @@ fn check_order(template_app: &mut TemplateApp) {
             }
         }
 
-
+    
     };
 }                                                                   
 fn buttons(template_app: &mut TemplateApp, ui: &mut Ui) {
     let wsize = ui.available_width();
     
-   
-            for each in &template_app.logs{
+    ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
+           for each in template_app.logs.iter(){
                 
                 ui.add_sized(
-                    [wsize / 6.0 - 5.0, 5.0],
+                    [wsize , 5.0],
                     egui::Label::new(each),   
                 );
+           
             }
     
+        });
     
-
-    let height= template_app.height;
+   
     ui.horizontal(|ui| {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
         
@@ -205,20 +251,22 @@ fn buttons(template_app: &mut TemplateApp, ui: &mut Ui) {
                 template_app.height=240.0;
             }else{
                 template_app.button="🔺".to_string();
-                template_app.height=4.0;
+                template_app.height=5.0;
             }
-
+        
          
            
         }
     });
     });
-    if template_app.height!=4.0{
+    
+    ui.separator();
+    if template_app.height!=5.0{
 
     ui.horizontal(|ui| {
         for but_index in 1..4 {
             let button = ui.add_sized(
-                [wsize / 3.0 - 5.0, height/4.0],
+                [wsize / 3.0 - 5.0,   template_app.height/4.0],
                 egui::Button::new(but_index.to_string()),
             );
             if button.clicked() {
@@ -231,7 +279,7 @@ fn buttons(template_app: &mut TemplateApp, ui: &mut Ui) {
     ui.horizontal(|ui| {
         for but_index in 4..7 {
             let button = ui.add_sized(
-                [wsize / 3.0 - 5.0, height/4.0],
+                [wsize / 3.0 - 5.0,   template_app.height/4.0],
                 egui::Button::new(but_index.to_string()),
             );
 
@@ -245,7 +293,7 @@ fn buttons(template_app: &mut TemplateApp, ui: &mut Ui) {
     ui.horizontal(|ui| {
         for but_index in 7..10 {
             let button = ui.add_sized(
-                [wsize / 3.0 - 5.0,height/4.0],
+                [wsize / 3.0 - 5.0,  template_app.height/4.0],
                 egui::Button::new(but_index.to_string()),
             );
             if button.clicked() {
@@ -257,7 +305,7 @@ fn buttons(template_app: &mut TemplateApp, ui: &mut Ui) {
     });
     ui.horizontal(|ui| {
         let button = ui.add_sized(
-            [wsize / 3.0 - 5.0,height/4.0],
+            [wsize / 3.0 - 5.0,  template_app.height/4.0],
             egui::Button::new("@".to_string()),
         );
         
@@ -270,7 +318,7 @@ fn buttons(template_app: &mut TemplateApp, ui: &mut Ui) {
         }
         }
         let button_0 = ui.add_sized(
-            [wsize / 3.0 - 5.0,height/4.0],
+            [wsize / 3.0 - 5.0,  template_app.height/4.0],
             egui::Button::new("0".to_string()),
         );
         if button_0.clicked() {
@@ -279,7 +327,7 @@ fn buttons(template_app: &mut TemplateApp, ui: &mut Ui) {
             check_order(template_app);
         }
         let button_c = ui.add_sized(
-            [wsize / 3.0 - 5.0, height/4.0],
+            [wsize / 3.0 - 5.0,    template_app.height/4.0],
             egui::Button::new("C".to_string()),
         );
         if button_c.clicked() {
@@ -324,9 +372,9 @@ impl<'a> Default for TemplateApp {
             paid: Vec::new(),
             backup: Vec::new(),
             last_update: Utc::now().timestamp(),
-            height:240.0,
+            height:20.0,
             button:"🔻".to_string(),
-            logs:Vec::new(),
+            logs:LimitedVecDeque::new(5),
         }
     }
 }
@@ -349,6 +397,10 @@ struct Notify {
     title:String,
     message:String,
     priority :String,
+    retry : u64,
+    expires_at: u64,
+    called_back: String,
+  
 }
 
 fn load_vector(respond_store: Arc<Mutex<Download>>) {
@@ -361,7 +413,7 @@ fn load_vector(respond_store: Arc<Mutex<Download>>) {
 
 
 }
-fn send_notification(order_numer:String) {
+pub fn send_notification(order_numer:String) {
          
     let data =Notify {
         token:"asw1cdy52m362zu57zxua7efgjofyh".to_string(),
@@ -369,6 +421,11 @@ fn send_notification(order_numer:String) {
         title: "Order Checkin!".to_string(),
         message: format!("order: {} Customer CheckIn!",order_numer),
         priority :"2".to_string(),
+        retry : 15,
+        expires_at: 150,
+        called_back: "https://settingupdate.com/new/callback.php".to_string(),
+   
+
       };
     let request = Request{
         headers: ehttp::Headers::new(&[
@@ -376,7 +433,8 @@ fn send_notification(order_numer:String) {
         ]),..Request::json("https://api.pushover.net/1/messages.json",&data).unwrap()};
    
     ehttp::fetch(request, move |response| {
-    
+        
+        println!("Response: {:?}",response);
     });
 
 
@@ -418,7 +476,7 @@ impl eframe::App for TemplateApp {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         // Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
         // For inspiration and more examples, go to https://emilk.github.io/egui
-     
+   
         egui::CentralPanel::default().show(ctx, |ui| {
             let ctx = ctx.clone();
              self.check_for_database_updates(); 
@@ -490,11 +548,11 @@ impl eframe::App for TemplateApp {
             }
         });
         
+      
         egui::TopBottomPanel::bottom("bot").show(ctx, |ui|
         
-             buttons(self, ui));
-        
-        
+            buttons(self, ui));
+       
         ctx.request_repaint();
 
     }
