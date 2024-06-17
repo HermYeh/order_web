@@ -6,15 +6,7 @@ use egui::{Id, RichText, TextureHandle, Vec2};
 use egui_extras::RetainedImage;
 use egui_extras::{Column, TableBuilder};
 use ehttp::*;
-use image;
-use std::fs;
-use std::io::ErrorKind;
-use std::io::Read;
-use std::io::Write;
-use std::path::Path;
-use std::sync::mpsc::channel;
-use std::sync::mpsc::TryRecvError;
-use std::thread;
+
 use super::order_table::Order;
 
 use super::order_table;
@@ -33,7 +25,7 @@ use std::collections::VecDeque;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 
-struct LimitedVecDeque<T> {
+pub struct LimitedVecDeque<T> {
     deque: VecDeque<T>,
     max_size: usize,
 }
@@ -46,7 +38,7 @@ impl<T> LimitedVecDeque<T> {
         }
     }
 
-    fn push(&mut self, value: T) {
+    pub fn push(&mut self, value: T) {
         if self.deque.len() == self.max_size {
             self.deque.pop_front();
         }
@@ -72,7 +64,7 @@ struct Msg {
 enum Download {
     None,
     Load,
-    Done(ehttp::Result<ehttp::Response>),
+    Done(),
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
@@ -83,11 +75,10 @@ pub struct TemplateApp {
     label: String,
 
     // This how you opt-out of serialization of a field
-    pub order_number: Vec<String>,
+    pub order_number: Box<Vec<String>>,
     #[serde(skip)]
-    pub total_order: Vec<Order>,
-    pub order_time: Vec<String>,
-    pub paid: Vec<String>,
+    pub total_order: Arc<Mutex<Vec<Order>>>,
+    pub paid:  Box<Vec<String>>,
     pub selection: usize,
     rows: i32,
     row_index: i32,
@@ -103,124 +94,12 @@ pub struct TemplateApp {
    pub height:f32,
     button:String,
     #[serde(skip)]
-    logs:LimitedVecDeque<String>,
+    pub logs:LimitedVecDeque<String>,
 }
 use serde_json::value::Serializer;
-use serde_json::Deserializer;
-
-
-
-
-fn check_order(template_app: &mut TemplateApp) {
+use serde_json::{from_slice, json, Deserializer};
     
-   
-    if template_app.order_number.len() == 4 {
-        let backup_size=template_app.backup.len();
-        let backup_data: Order;
-        let log =template_app.order_number.concat();
-        let time: DateTime<Local> = Local::now();
-        let now =time.format("%H:%M");
-        if template_app.order_number.concat() == "0000" {
-            if backup_size>0{
-            let backup = template_app.backup.pop();
-            match backup {
-                Some(data) => {
-                    backup_data = data.clone();
-                    
-                    save_to_remote(data);
-                    let target_first_value = backup_data.clone().order_number;
-                    
-                    
-                   
-                    let contains_first_value: Vec<_> = template_app
-                        .total_order
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(index,item)| {
-                            if item.order_number == target_first_value {
-                                Some(index)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-                    if !contains_first_value.is_empty() {
-                        for index in contains_first_value {
-                            template_app.total_order.remove(index);
-                        }
-                        template_app.order_number.clear();
-                        template_app.logs.push(format!("delete last entry"));
-                    } else {
-                        template_app.total_order.push(backup_data.clone());
-                        template_app.order_number.clear();
-                        template_app.selection = template_app.total_order.len() - 1;
-                        template_app.scroll_to_row                                           = Some(template_app.selection);
-                    }
-                }
-                None => {}
-            };
-            
-            template_app.order_number.clear();
-            template_app.selection = 999;
-            }
-        } else {
-            
-          
-            let target_first_value = template_app.order_number.concat();
-            let contains_first_value: Vec<_> = template_app
-                .total_order
-                .iter()
-                .enumerate()
-                .filter_map(|(index,item)| {
-                    if item.order_number == target_first_value {
-                        Some(index)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            if !contains_first_value.is_empty() {
-                for index in contains_first_value {
-                   
-                    let data =template_app.total_order.remove(index);
-                    template_app.backup.push(data.clone());
-                    
-                   
-                    template_app.logs.push(format!("order# {} Check out!@ {}",log,now));
-                
-                    order_table::save_to_remote(data);
-
-                };
-                template_app.order_number.clear();
-          
-            } else {
-                let time: DateTime<Local> = Local::now();
-           
-                let order = Order{
-                    order_number: template_app.order_number.concat(),
-                    check_in: time.to_rfc3339(),
-                    payment: "0".to_owned(),
-                
-                   
-                };
-                template_app.logs.push(format!("order# {} Check in!@ {}",log,now));
-              
-            
-                template_app.backup.push(order.clone());
-                order_table::save_to_remote(order.clone());
-                template_app.total_order.push(order);
-                template_app.order_number.clear();
-                template_app.selection = template_app.total_order.len() - 1;
-                template_app.scroll_to_row = Some(template_app.selection);
-            }
-            if backup_size>10{
-                template_app.backup.clear();
-            }
-        }
-
-    
-    };
-}                                                                   
+    /*
 fn buttons(template_app: &mut TemplateApp, ui: &mut Ui) {
     let wsize = ui.available_width();
     
@@ -351,16 +230,53 @@ fn buttons(template_app: &mut TemplateApp, ui: &mut Ui) {
         }
     });
     }
-}
+} */
 
+use std::env;
+
+use anyhow;
+fn load_vector()-> anyhow::Result<Vec<Order>>{
+    
+    let request = Request{
+        headers: ehttp::Headers::new(&[
+            ("Content-Type", "application/json"),
+        ]),..Request::get("https://127.0.0.1:3030/load")};
+  
+    let orders:Vec<Order>=Vec::new();
+    
+    ehttp::fetch(request, |response: Result<Response>| {
+        match response {
+            Ok(response) => {
+                if response.status == 200 {
+                    // Deserialize the JSON response into a vector
+                    match from_slice::<Vec<Order>>(&response.bytes) {
+                        Ok(order) => {
+                            println!("Items: {:?}", order);
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to parse JSON: {}", e);
+                        }
+                    }
+                } else {
+                    eprintln!("HTTP error: {}", response.status);
+                }
+            }
+            Err(e) => {
+                eprintln!("Request failed: {}", e);
+            }
+        }
+    });
+   
+   Ok(orders)
+}
 impl<'a> Default for TemplateApp {
-    fn default() -> Self {
+    fn default() ->Self {
         Self {
             // Example stuff:
             label: "Hello World!".to_owned(),
-            order_number: Vec::new(),
-            total_order: Default::default(),
-            order_time: Vec::new(),
+            order_number: Box::new(Vec::new()),
+            total_order:Arc::new(Mutex::new(Vec::new())),
+          
             selection: 999,
             rows: 1,
             row_index: 0,
@@ -369,10 +285,10 @@ impl<'a> Default for TemplateApp {
             scroll_to_row: None,
             name: "".to_owned(),
             respond: Arc::new(Mutex::new(Download::Load)),
-            paid: Vec::new(),
+            paid: Box::new(Vec::new()),
             backup: Vec::new(),
             last_update: Utc::now().timestamp(),
-            height:20.0,
+            height:240.0,
             button:"🔻".to_string(),
             logs:LimitedVecDeque::new(5),
         }
@@ -398,21 +314,150 @@ struct Notify {
     message:String,
     priority :String,
     retry : u64,
-    expires_at: u64,
+    expire : u64,
     called_back: String,
   
 }
 
-fn load_vector(respond_store: Arc<Mutex<Download>>) {
-    
-    
-    let request = Request::get("https://settingupdate.com/new/load.php");
-    ehttp::fetch(request, move |response| {
-        *respond_store.lock().unwrap() = Download::Done(response);
-    });
-
-
+#[derive(Default)]
+struct EchoServer;
+pub fn timenow()->String{
+    let time: DateTime<Local> = Local::now();
+    let now = time.format("%H:%M").to_string();
+    now
 }
+impl TemplateApp {
+    /// Called once before the first frame.
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        // This is also where you can customize the look and feel of egui using
+        // `cc.egui_ctx.set_visuals` and `cc.egui_ctx.set_fonts`.
+
+        // Load previous app state (if any).
+        // Note that you must enable the `persistence` feature for this to work.
+      /*   if let Some(storage) = cc.storage {
+            return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
+        }
+         */
+        Default::default()
+    }
+    fn check_for_database_updates(&mut self) {
+      
+        if Utc::now().timestamp()-self.last_update> 2 {
+            self.last_update=Utc::now().timestamp();
+          let mut totalorder= self.total_order.lock().unwrap();
+          *totalorder=load_vector().unwrap();
+        }
+    } 
+    fn restore_backup(&mut self){
+        if let Some(backup) = self.backup.pop() {
+            self.total_order.lock().unwrap().push(backup);
+            self.logs.push(format!("restore last entry"));
+            self.selection = self.total_order.lock().unwrap().len() - 1;
+            self.scroll_to_row = Some(self.selection);
+        
+        }
+       
+    }
+    fn restore_input(&mut self){
+        if let Some(backup) = self.backup.pop() {
+            self.total_order.lock().unwrap().push(backup);
+            self.logs.push(format!("restore last entry"));
+            self.selection = self.total_order.lock().unwrap().len() - 1;
+            self.scroll_to_row = Some(self.selection);
+        
+        }
+       
+    }
+    fn check_order(&mut self) {
+        println!("Checking order: {:?}", self.order_number);
+        
+        if self.order_number.len() == 4 {
+            println!("Order number length is 4");
+            let backup_size = self.backup.len();
+           
+            let time: DateTime<Local> = Local::now();
+            let now = time.format("%H:%M").to_string();
+            
+            if self.order_number.concat() == "0000" {
+                println!("Order number is 0000");
+                if backup_size > 0 {
+                    if let Some(backup) = self.backup.pop() {
+                        save_to_remote(backup.clone());
+                        let target_first_value = backup.clone().order_number;
+                        
+                        let contains_first_value: Vec<_> = self
+                            .total_order.lock().unwrap()
+                            .iter() 
+                            .enumerate()
+                            .filter_map(|(index, item)| {
+                                if item.order_number == target_first_value {
+                                    Some(index)
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+                        
+                        if !contains_first_value.is_empty() {
+                            for index in contains_first_value {
+                                self.total_order.lock().unwrap().remove(index);
+                                self.restore_backup();
+                              
+                            }
+                            self.logs.push(format!("delete last entry"));
+                        } else {
+                            self.restore_input();
+                        }
+                    }
+                    self.order_number.clear();
+                    self.selection = 999;
+                }
+            } else {
+                let target_first_value = self.order_number.concat();
+                let contains_first_value: Vec<_> = self
+                    .total_order
+                    .lock().unwrap().iter()
+                    .enumerate()
+                    .filter_map(|(index, item)| {
+                        if *item.order_number == target_first_value {
+                            Some(index)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                
+                if !contains_first_value.is_empty() {
+                    for index in contains_first_value {
+                        
+                        self.delete(index);
+                 
+                    }
+                
+                } else {
+                    let order = Order {
+                        order_number:Box::new(self.order_number.concat()),
+                        check_in: Box::new(time.to_rfc3339()),
+                        payment: Box::new("0".to_owned()),
+                    };
+
+                    save_to_remote(order.clone());
+                   self.total_order.lock().unwrap().push(order.clone());
+                   self.logs.push(format!("order# {} Check in!@ {}", order.order_number, now));
+               
+                    self.selection = self.total_order.lock().unwrap().len() - 1;
+                    self.scroll_to_row = Some(self.selection);
+                }
+                if backup_size > 10 {
+                    self.backup.clear();
+                }
+    
+            }
+            self.order_number.clear();
+        }
+    }         
+    
+
 pub fn send_notification(order_numer:String) {
          
     let data =Notify {
@@ -420,13 +465,14 @@ pub fn send_notification(order_numer:String) {
         user: "u8skjyeb16zq9hmq2jg1gbtmazw485".to_string(),
         title: "Order Checkin!".to_string(),
         message: format!("order: {} Customer CheckIn!",order_numer),
-        priority :"2".to_string(),
-        retry : 15,
-        expires_at: 150,
+        priority :"1".to_string(),
+        retry : 30,
+        expire: 150,
         called_back: "https://settingupdate.com/new/callback.php".to_string(),
    
-
+      
       };
+
     let request = Request{
         headers: ehttp::Headers::new(&[
             ("Content-Type", "application/json"),
@@ -438,31 +484,160 @@ pub fn send_notification(order_numer:String) {
     });
 
 
-}
-#[derive(Default)]
-struct EchoServer;
+}    
+    
+    pub fn delete(&mut self,index:usize){
+        
 
-impl TemplateApp {
-    /// Called once before the first frame.
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        // This is also where you can customize the look and feel of egui using
-        // `cc.egui_ctx.set_visuals` and `cc.egui_ctx.set_fonts`.
-
-        // Load previous app state (if any).
-        // Note that you must enable the `persistence` feature for this to work.
-        if let Some(storage) = cc.storage {
-            return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
-        }
-
-        Default::default()
+        let order=self.total_order.lock().unwrap().remove(index);
+        order_table::save_to_remote(order.clone());
+        self.backup.push(order.clone());
+        self.logs.push(format!("order# {} Check out!@ {}", order.order_number,timenow()));
+       
+    
     }
-    fn check_for_database_updates(&mut self) {
+    fn render_order_buttons(&mut self, ui: &mut Ui) {
+
+        let wsize = ui.available_width();
+    
       
-        if Utc::now().timestamp()-self.last_update> 2 {
-            self.last_update=Utc::now().timestamp();
-            load_vector(self.respond.clone());
+        ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+            
+               for each in self.logs.iter(){
+                    
+                    ui.add_sized(
+                        [wsize, 5.0],
+                        egui::Label::new(each),   
+                    );
+               
+                }
+        
+       
+            });
+   
+            ui.with_layout(egui::Layout::top_down(egui::Align::RIGHT), |ui| {
+            
+          
+            let button_down = ui.add_sized(
+                [wsize / 6.0 - 5.0, 3.0],
+                egui::Button::new(self.button.to_string()),
+            );
+            if button_down.clicked() {
+                if   self.button=="🔺".to_string(){
+                    self.button="🔻".to_string();
+                    self.height=240.0;
+                }else{
+                    self.button="🔺".to_string();
+                    self.height=5.0;
+                }
+            
+             
+               
+            }
+        });
+   
+        
+        ui.separator();
+        if self.height!=5.0{
+
+        let wsize = ui.available_width();
+        
+        for row in 0..3 {
+            ui.horizontal(|ui| {
+                for col in 1..4 {
+                    let but_index = row * 3 + col;
+                    if but_index < 10 {
+                      
+                        let button = ui.add_sized(
+                            [wsize / 3.0 - 5.0, self.height / 4.0],
+                            egui::Button::new(but_index.to_string()),
+                        );
+                   
+                        if button.clicked() {
+                            self.selection = 999;
+                            self.order_number.push(but_index.to_string());
+                            self.check_order();
+                        } 
+                    }
+                }
+            });
         }
-    } 
+
+        ui.horizontal(|ui| {
+            self.render_control_buttons(ui, wsize);
+        });
+    }
+    }
+    
+    fn render_control_buttons(&mut self, ui: &mut Ui, wsize: f32) {
+        
+        
+        let button = ui.add_sized(
+            [wsize / 3.0 - 5.0, self.height / 4.0],
+            egui::Button::new("@".to_string()),
+        );
+        if button.clicked() {
+            if self.selection < self.total_order.lock().unwrap().len() {
+                let orderid = self.total_order.lock().unwrap()[self.selection].order_number.clone();
+                TemplateApp::send_notification(*orderid);
+            }
+        }
+        
+        let button_0 = ui.add_sized(
+            [wsize / 3.0 - 5.0, self.height / 4.0],
+            egui::Button::new("0".to_string()),
+        );
+        if button_0.clicked() {
+            self.order_number.push("0".to_string());
+            self.selection = 999;
+            self.check_order();
+        }
+        
+        let button_c = ui.add_sized(
+            [wsize / 3.0 - 5.0, self.height / 4.0],
+            egui::Button::new("C".to_string()),
+        );
+        if button_c.clicked() {
+            self.button_c_clicked()
+           
+        }
+    }
+
+    fn button_c_clicked(&mut self){
+       
+        if self.selection != 999 {
+            if self.selection<self.total_order.lock().unwrap().len(){
+        
+            self.delete( self.selection);
+          
+            self.update_selection();
+        }
+        } else {
+            self.order_number.clear();
+        }
+
+    }
+    fn update_selection(&mut self) {
+        if self.selection == self.total_order.lock().unwrap().len() && !self.total_order.lock().unwrap().is_empty() {
+            self.selection = self.total_order.lock().unwrap().len() - 1;
+        } else {
+            self.selection = 999;
+        }
+    }
+    fn handle_network_response(&mut self, response: ehttp::Result<ehttp::Response>) {
+        match response {
+            Err(err) => {
+              
+            }
+            Ok(response) => {
+                self.respond = Arc::new(Mutex::new(Download::None));
+                let text = response.text().unwrap_or_default();
+                let orders: Vec<Order> = serde_json::from_str(&text).expect("JSON was not well-formatted");
+                self.total_order =Arc::new(Mutex::new(orders));
+            }
+        }
+    }
+
 }
 
 
@@ -470,7 +645,7 @@ impl TemplateApp {
 impl eframe::App for TemplateApp {
     /// Called by the frame work to save state before shutdown.
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        eframe::set_value(storage, eframe::APP_KEY, self);
+   
     }
     
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
@@ -479,23 +654,9 @@ impl eframe::App for TemplateApp {
    
         egui::CentralPanel::default().show(ctx, |ui| {
             let ctx = ctx.clone();
-             self.check_for_database_updates(); 
        
-           
-            /*  let respond_store = self.respond.clone();
-
-
-            let getrequest = Request::get("https://ts.maya.se/1.php");
-
-
-            ehttp::fetch(getrequest, move |response| {
-
-                if response.unwrap().text()==Some("1"){
-
-                    load_vector(respond_store);
-                }
-
-            }); */
+       
+       
 
             let body_text_size = TextStyle::Body.resolve(ui.style()).size;
             use egui_extras::{Size, StripBuilder};
@@ -505,55 +666,43 @@ impl eframe::App for TemplateApp {
                 .vertical(|mut strip| {
                     strip.cell(|ui| {
                         egui::ScrollArea::horizontal().show(ui, |ui| {
-                            let mut table = order_table::Table::default();
+                            let mut table = Box::new(order_table::Table::default());
                             table.table_ui(ui, self);
                         });
                     });
                 });
-
-            let copy = &self.respond.clone();
-            let download: &Download = &copy.lock().unwrap();
             
-            let respond_store = self.respond.clone();
-
-            match download {
-                Download::None => {}
-                Download::Load => {
-                    load_vector(respond_store);
-                }
-                Download::Done(response) => match response {
-                    Err(err) => {
-                        ui.label(err);
-                    }
-                    Ok(response) => {
-                        self.respond = Arc::new(Mutex::new(Download::None));
-                        let text = &response.text();
-                        println!("{}", text.unwrap());
-                        let orders: Vec<Order> = serde_json::from_str(text.unwrap())
-                            .expect("JSON was not well-formatted");
-                        println!("{:?}", &orders);
-                        self.total_order=orders;
-                 
-                       /*  self.total_order.clear();
-                        for order in orders {
-                            self.total_order.push((
-                                order.order_number,
-                                order.check_in,
-                                order.payment,
-                            ));
-                            println!("{:?}", &self.total_order);
-                        } */
-                    }
-                },
-            }
+         
+          
         });
         
       
         egui::TopBottomPanel::bottom("bot").show(ctx, |ui|
-        
-            buttons(self, ui));
-       
-        ctx.request_repaint();
 
+        self.render_order_buttons(ui));
+     
+
+        let copy = &self.respond.clone();
+            let download: &Download = &copy.lock().unwrap();
+            
+            let respond_store = self.respond.clone();
+        self.check_for_database_updates(); 
+        match download {
+           Download::None => {}
+           Download::Load => {
+            let mut totalorder= self.total_order.lock().unwrap();
+            *totalorder=load_vector().unwrap();
+            *respond_store.lock().unwrap()=Download::None;
+                   }
+           Download::Done() => {
+            let mut totalorder= self.total_order.lock().unwrap();
+            *totalorder=load_vector().unwrap();
+                   
+           }
+           , 
+       }
+        ctx.request_repaint();
+    
     }
+    
 }

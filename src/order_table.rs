@@ -5,18 +5,18 @@ use chrono::TimeZone;
 use ehttp::Request;
 use std::io::Bytes;
 
-use app::TemplateApp;
+
 
 use super::app;
-use app::send_notification;
+use app::TemplateApp;
 
 use std::fmt;
 
 #[derive(Serialize, Deserialize, Clone, Debug,PartialEq,Eq)]
 pub struct Order {
-    pub order_number: String,
-    pub check_in: String,
-    pub payment: String,
+    pub order_number:  Box<String>,
+    pub check_in:  Box<String>,
+    pub payment:  Box<String>,
 }
 impl fmt::Display for Order {
     // This trait requires `fmt` with this exact signature.
@@ -90,12 +90,12 @@ pub fn save_to_remote(total_order:Order)  {
      let request = Request{
         headers: ehttp::Headers::new(&[
             ("Content-Type", "application/json"),
-        ]),..Request::json("https://settingupdate.com/new/order.php",&total_order).unwrap()};
+        ]),..Request::json("https://ts.maya.se/order.php",&total_order).unwrap()};
   
     
         ehttp::fetch(request, move |response| {
  
-            println!("Response: {:?}",response);
+          //  println!("Response: {:?}",response);
             
          });
      
@@ -114,12 +114,12 @@ pub fn update_to_remote(order:Order)  {
     let request = Request{
        headers: ehttp::Headers::new(&[
            ("Content-Type", "application/json"),
-       ]),..Request::json("https://settingupdate.com/new/delete.php",&order).unwrap()};
+       ]),..Request::json("https://ts.maya.se/delete.php",&order).unwrap()};
  
    
        ehttp::fetch(request, move |response| {
 
-           println!("Response: {:?}",response);
+        //   println!("Response: {:?}",response);
            
         });
     
@@ -131,13 +131,13 @@ impl Table {
     
    pub fn table_ui(&mut self, ui: &mut egui::Ui,table_data:&mut TemplateApp) {
         use egui_extras::{Column, TableBuilder};
-
+    
    
     let s = Stroke {
             width: 0.0,
             color: Color32::TRANSPARENT,
         };
-    let available_height = ui.available_height()-table_data.height-90.0;
+    let available_height = ui.available_height()-table_data.height-130.0;
     let wsize=ui.available_width();
     let mut table = TableBuilder::new(ui).cell_layout(egui::Layout::left_to_right(egui::Align::TOP))
         .column(Column::exact(wsize/4.00-10.0))
@@ -161,10 +161,10 @@ impl Table {
          
         let sort_click=ui.add_sized(ui.available_size(),egui::Button::new("Order#").fill(egui::Color32::TRANSPARENT));
         if sort_click.clicked(){
-            let data_temp= table_data.total_order.clone();
-            table_data.total_order.sort();
-            if data_temp== table_data.total_order{
-                table_data.total_order.reverse();
+            let data_temp= table_data.total_order.lock().unwrap().clone();
+            table_data.total_order.lock().unwrap().sort();
+            if data_temp== table_data.total_order.lock().unwrap().clone(){
+                table_data.total_order.lock().unwrap().reverse();
             }
           
         }
@@ -173,10 +173,10 @@ impl Table {
         header.col(|ui| {
             let sort_click=ui.add_sized(ui.available_size(),egui::Button::new("Check In").fill(egui::Color32::TRANSPARENT));
             if sort_click.clicked(){
-                let data_temp= table_data.total_order.clone();
-                table_data.total_order.sort_by_key(|k| DateTime::parse_from_rfc3339(&k.check_in).unwrap());
-                if data_temp== table_data.total_order{
-                    table_data.total_order.reverse();
+                let data_temp= table_data.total_order.lock().unwrap().clone();
+                table_data.total_order.lock().unwrap().sort_by_key(|k| DateTime::parse_from_rfc3339(&k.check_in).unwrap());
+                if data_temp== table_data.total_order.lock().unwrap().clone(){
+                    table_data.total_order.lock().unwrap().reverse();
                 }
               
             }
@@ -186,10 +186,10 @@ impl Table {
         header.col(|ui| {
             let sort_click=ui.add_sized(ui.available_size(),egui::Button::new("Wait Time").fill(egui::Color32::TRANSPARENT));
             if sort_click.clicked(){
-                let data_temp= table_data.total_order.clone();
-                table_data.total_order.sort_by_key(|k| DateTime::parse_from_rfc3339(&k.check_in).unwrap());
-                if data_temp== table_data.total_order{
-                    table_data.total_order.reverse();
+                let data_temp= table_data.total_order.lock().unwrap().clone();
+                table_data.total_order.lock().unwrap().sort_by_key(|k| DateTime::parse_from_rfc3339(&k.check_in).unwrap());
+                if data_temp== table_data.total_order.lock().unwrap().clone(){
+                    table_data.total_order.lock().unwrap().reverse();
                 }
               
             }
@@ -202,9 +202,9 @@ impl Table {
         })
         
     .body(|mut body| {
-    let order_size=table_data.total_order.len();
+    let order_size=table_data.total_order.lock().unwrap().len();
     for row_index in 0..order_size {    
-        if row_index>=table_data.total_order.len(){
+        if row_index>=table_data.total_order.lock().unwrap().len(){
             continue;
          }
         body.row(20.0, |mut row| {
@@ -215,14 +215,14 @@ impl Table {
             }
             
             row.col(|ui| {
-                ui.add_sized(ui.available_size(),Label::new(egui::RichText::new(table_data.total_order[rowindex].order_number.clone()).size(20.0)).selectable(false),);
+                ui.add_sized(ui.available_size(),Label::new(egui::RichText::new(*table_data.total_order.lock().unwrap()[rowindex].order_number.clone()).size(20.0)).selectable(false),);
             });
             row.col(|ui| {
-                ui.add_sized(ui.available_size(),Label::new(egui::RichText::new(DateTime::parse_from_rfc3339(&table_data.total_order[rowindex].check_in.clone()).unwrap().format("%H:%M").to_string()).size(20.0)).selectable(false),);
+                ui.add_sized(ui.available_size(),Label::new(egui::RichText::new(DateTime::parse_from_rfc3339(&table_data.total_order.lock().unwrap()[rowindex].check_in.clone()).unwrap().format("%H:%M").to_string()).size(20.0)).selectable(false),);
             });
             row.col(|ui| {
                 let time_now: DateTime<Local> = Local::now();
-                let time_wait = time_now.to_utc()-(DateTime::parse_from_rfc3339(&table_data.total_order[rowindex].check_in.clone()).unwrap().to_utc());
+                let time_wait = time_now.to_utc()-(DateTime::parse_from_rfc3339(&table_data.total_order.lock().unwrap()[rowindex].check_in.clone()).unwrap().to_utc());
         
              
                 let minutes = (time_wait.num_minutes()).to_string();
@@ -235,18 +235,22 @@ impl Table {
                 let response = ui
                 .add_sized(
                     ui.available_size(),
-                    egui::Button::new(if table_data.total_order[rowindex].payment=="1" {"Sent"}else if table_data.total_order[rowindex].payment=="2" {"Received"} else {""}),
+                    egui::Button::new(if *table_data.total_order.lock().unwrap() [rowindex].payment=="1" {"Sent"}else if *table_data.total_order.lock().unwrap()[rowindex].payment=="2" {"Received"} else {""}),
                 );
                 if response.clicked(){
-                 if table_data.total_order[rowindex].payment=="0"{
+                 if *table_data.total_order.lock().unwrap()[rowindex].payment=="0"{
                     
-                    send_notification(table_data.total_order[rowindex].order_number.clone());
+                    app::TemplateApp::send_notification(*table_data.total_order.lock().unwrap()[rowindex].order_number.clone());
+                    table_data.logs.push(format!("Sent order #{} notification to kitchen!",*table_data.total_order.lock().unwrap()[rowindex].order_number.clone()));
+                    *table_data.total_order.lock().unwrap()[rowindex].payment="1".to_string();
+                    update_to_remote(table_data.total_order.lock().unwrap()[rowindex].clone());
                  
-                 }else{
-                
+                 }else if *table_data.total_order.lock().unwrap()[rowindex].payment=="1" {
+                    *table_data.total_order.lock().unwrap()[rowindex].payment="2".to_string();
+                    update_to_remote(table_data.total_order.lock().unwrap()[rowindex].clone());
                  }
                 
-                 update_to_remote(table_data.total_order[rowindex].clone());
+           
                   
                 }
             });
@@ -257,7 +261,7 @@ impl Table {
        
         };
         body.row(20.0, |mut row| {
-            if table_data.selection==table_data.total_order.len(){
+            if table_data.selection==table_data.total_order.lock().unwrap().len(){
                 row.set_selected(true);
             }
             row.col(|ui| {
@@ -275,14 +279,17 @@ impl Table {
 }  
 fn toggle_row_selection(select:&mut TemplateApp, row_index: usize, row_response: &egui::Response) {
     if row_response.clicked() {
-
+        
         if select.selection==row_index{
-            let delete=select.total_order.remove(row_index);
+
+            let delete=select.total_order.lock().unwrap().remove(row_index);
+            save_to_remote( delete.clone());
             select.backup.push(delete.clone());
-            save_to_remote( delete);
+            select.logs.push(format!("order# {} Check out!@ {}", delete.order_number, app::timenow()));
+       
      
             select.selection=999;
-
+        
         }else{
             select.selection=row_index
         }
