@@ -64,7 +64,7 @@ struct Msg {
 enum Download {
     None,
     Load,
-    Done(),
+    Done(ehttp::Result<ehttp::Response>),
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
@@ -235,40 +235,8 @@ fn buttons(template_app: &mut TemplateApp, ui: &mut Ui) {
 use std::env;
 
 use anyhow;
-fn load_vector()-> anyhow::Result<Vec<Order>>{
-    
-    let request = Request{
-        headers: ehttp::Headers::new(&[
-            ("Content-Type", "application/json"),
-        ]),..Request::get("https://127.0.0.1:3030/load")};
-  
-    let orders:Vec<Order>=Vec::new();
-    
-    ehttp::fetch(request, |response: Result<Response>| {
-        match response {
-            Ok(response) => {
-                if response.status == 200 {
-                    // Deserialize the JSON response into a vector
-                    match from_slice::<Vec<Order>>(&response.bytes) {
-                        Ok(order) => {
-                            println!("Items: {:?}", order);
-                        }
-                        Err(e) => {
-                            eprintln!("Failed to parse JSON: {}", e);
-                        }
-                    }
-                } else {
-                    eprintln!("HTTP error: {}", response.status);
-                }
-            }
-            Err(e) => {
-                eprintln!("Request failed: {}", e);
-            }
-        }
-    });
-   
-   Ok(orders)
-}
+
+
 impl<'a> Default for TemplateApp {
     fn default() ->Self {
         Self {
@@ -344,10 +312,24 @@ impl TemplateApp {
       
         if Utc::now().timestamp()-self.last_update> 2 {
             self.last_update=Utc::now().timestamp();
-          let mut totalorder= self.total_order.lock().unwrap();
-          *totalorder=load_vector().unwrap();
+      
+         load_vector(self.respond.clone());
         }
     } 
+    fn load_vector(&mut self) {
+    
+    
+        /*  let request = Request::get("https://settingupdate.com/new/load.php");
+         ehttp::fetch(request, move |response| {
+             *respond_store.lock().unwrap() = Download::Done(response);
+         }); */
+         let request = Request::get("https://127.0.0.1:4040/load");
+         ehttp::fetch(request, move |response| {
+          
+           
+         });
+     }
+     
     fn restore_backup(&mut self){
         if let Some(backup) = self.backup.pop() {
             self.total_order.lock().unwrap().push(backup);
@@ -487,7 +469,7 @@ pub fn send_notification(order_numer:String) {
 }    
     
     pub fn delete(&mut self,index:usize){
-        
+
 
         let order=self.total_order.lock().unwrap().remove(index);
         order_table::save_to_remote(order.clone());
@@ -677,32 +659,43 @@ impl eframe::App for TemplateApp {
         });
         
       
-        egui::TopBottomPanel::bottom("bot").show(ctx, |ui|
+        egui::TopBottomPanel::bottom("bot").show(ctx, |ui|{    
 
-        self.render_order_buttons(ui));
+        self.render_order_buttons(ui);
      
 
         let copy = &self.respond.clone();
             let download: &Download = &copy.lock().unwrap();
             
             let respond_store = self.respond.clone();
-        self.check_for_database_updates(); 
-        match download {
-           Download::None => {}
-           Download::Load => {
-            let mut totalorder= self.total_order.lock().unwrap();
-            *totalorder=load_vector().unwrap();
-            *respond_store.lock().unwrap()=Download::None;
-                   }
-           Download::Done() => {
-            let mut totalorder= self.total_order.lock().unwrap();
-            *totalorder=load_vector().unwrap();
-                   
-           }
-           , 
-       }
+
+            match download {
+                Download::None => {}
+                Download::Load => {
+                    load_vector(respond_store);
+                }
+                Download::Done(response) => match response {
+                    Err(err) => {
+                        ui.label(err);
+                    }
+                    Ok(response) => {
+                        self.respond = Arc::new(Mutex::new(Download::None));
+                        let text = &response.text();
+                        println!("{}", text.unwrap());
+                        let orders: Vec<Order> = serde_json::from_str(text.unwrap())
+                            .expect("JSON was not well-formatted");
+                        println!("{:?}", &orders);
+                        *self.total_order.lock().unwrap()=orders;
+                 
+                     
+                    }
+                },
+            }
+    
+            self.check_for_database_updates();
+      
+     
         ctx.request_repaint();
-    
+    });
     }
-    
 }

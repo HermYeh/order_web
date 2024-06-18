@@ -90,7 +90,7 @@ pub fn save_to_remote(total_order:Order)  {
      let request = Request{
         headers: ehttp::Headers::new(&[
             ("Content-Type", "application/json"),
-        ]),..Request::json("https://ts.maya.se/order.php",&total_order).unwrap()};
+        ]),..Request::json("https://settingupdate.com/new/order.php",&total_order).unwrap()};
   
     
         ehttp::fetch(request, move |response| {
@@ -114,7 +114,7 @@ pub fn update_to_remote(order:Order)  {
     let request = Request{
        headers: ehttp::Headers::new(&[
            ("Content-Type", "application/json"),
-       ]),..Request::json("https://ts.maya.se/delete.php",&order).unwrap()};
+       ]),..Request::json("https://settingupdate.com/new/delete.php",&order).unwrap()};
  
    
        ehttp::fetch(request, move |response| {
@@ -163,7 +163,7 @@ impl Table {
         if sort_click.clicked(){
             let data_temp= table_data.total_order.lock().unwrap().clone();
             table_data.total_order.lock().unwrap().sort();
-            if data_temp== table_data.total_order.lock().unwrap().clone(){
+            if data_temp== *table_data.total_order.lock().unwrap(){
                 table_data.total_order.lock().unwrap().reverse();
             }
           
@@ -175,7 +175,7 @@ impl Table {
             if sort_click.clicked(){
                 let data_temp= table_data.total_order.lock().unwrap().clone();
                 table_data.total_order.lock().unwrap().sort_by_key(|k| DateTime::parse_from_rfc3339(&k.check_in).unwrap());
-                if data_temp== table_data.total_order.lock().unwrap().clone(){
+                if data_temp== *table_data.total_order.lock().unwrap(){
                     table_data.total_order.lock().unwrap().reverse();
                 }
               
@@ -188,7 +188,7 @@ impl Table {
             if sort_click.clicked(){
                 let data_temp= table_data.total_order.lock().unwrap().clone();
                 table_data.total_order.lock().unwrap().sort_by_key(|k| DateTime::parse_from_rfc3339(&k.check_in).unwrap());
-                if data_temp== table_data.total_order.lock().unwrap().clone(){
+                if data_temp== *table_data.total_order.lock().unwrap(){
                     table_data.total_order.lock().unwrap().reverse();
                 }
               
@@ -235,7 +235,7 @@ impl Table {
                 let response = ui
                 .add_sized(
                     ui.available_size(),
-                    egui::Button::new(if *table_data.total_order.lock().unwrap() [rowindex].payment=="1" {"Sent"}else if *table_data.total_order.lock().unwrap()[rowindex].payment=="2" {"Received"} else {""}),
+                    egui::Button::new(if *table_data.total_order.lock().unwrap()[rowindex].payment=="1" {"Sent"}else if *table_data.total_order.lock().unwrap()[rowindex].payment=="2" {"Received"} else {""}),
                 );
                 if response.clicked(){
                  if *table_data.total_order.lock().unwrap()[rowindex].payment=="0"{
@@ -281,12 +281,11 @@ fn toggle_row_selection(select:&mut TemplateApp, row_index: usize, row_response:
     if row_response.clicked() {
         
         if select.selection==row_index{
-
             let delete=select.total_order.lock().unwrap().remove(row_index);
-            save_to_remote( delete.clone());
+        
             select.backup.push(delete.clone());
-            select.logs.push(format!("order# {} Check out!@ {}", delete.order_number, app::timenow()));
-       
+            select.logs.push(format!("order# {} Check out!@ {}", delete.clone().order_number, app::timenow()));
+            save_to_remote( delete);
      
             select.selection=999;
         
